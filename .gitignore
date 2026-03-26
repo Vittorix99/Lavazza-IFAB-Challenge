@@ -1,3 +1,5 @@
 docker/.env
 
 !docker/local-files/.gitkeep
+venv/
+.env
