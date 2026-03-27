@@ -1,6 +1,6 @@
 docker/.env
 
 !docker/local-files/.gitkeep
-venv/
+.venv/
 .env
 .DS_Store
