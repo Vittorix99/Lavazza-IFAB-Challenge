@@ -83,7 +83,7 @@ print("\nAnteprima dati pronti per MongoDB (in EUR):")
 print(df_mongo_db.tail())
 
 
-# --- 3. VISUALIZZAZIONE DATI (LAVAZZA DASHBOARD IN EUR) ---
+# --- 3. VISUALIZZAZIONE DATI (LAVAZZA PROCUREMENT INTELLIGENCE) ---
 
 print("\nGenerazione dashboard analitica in corso...")
 
@@ -97,25 +97,32 @@ arabica = df_plot['Arabica']
 robusta = df_plot['Robusta']
 spread = df_plot['Spread']
 
-# Medie mobili a 12 mesi
-ma12_arabica = arabica.rolling(12, center=True).mean()
-ma12_robusta = robusta.rolling(12, center=True).mean()
+# --- CALCOLI STRATEGICI PER PROCUREMENT ---
+# 1. Medie mobili a 12 mesi e Deviazioni Standard (Bande di prezzo)
+ma12_arabica = arabica.rolling(12).mean()
+std12_arabica = arabica.rolling(12).std()
+upper_band_a = ma12_arabica + std12_arabica
+lower_band_a = ma12_arabica - std12_arabica
 
-# Proiezioni a 5 anni
-date_nums = dates.map(datetime.toordinal)
-slope_a, int_a, r_a, _, _ = stats.linregress(date_nums, arabica)
-slope_r, int_r, r_r, _, _ = stats.linregress(date_nums, robusta)
+ma12_robusta = robusta.rolling(12).mean()
 
-future_dates = [dates.iloc[-1] + relativedelta(months=i) for i in range(1, 61)]
-future_nums = np.array([d.toordinal() for d in future_dates])
-trend_arabica_fut = slope_a * future_nums + int_a
-trend_robusta_fut = slope_r * future_nums + int_r
+# 2. Volatilità Annualizzata (Rischio di Mercato)
+# Calcolata sulla deviazione standard dei rendimenti percentuali mensili
+volatility_arabica = arabica.pct_change().rolling(12).std() * np.sqrt(12) * 100
+volatility_robusta = robusta.pct_change().rolling(12).std() * np.sqrt(12) * 100
 
-# Stile e Colori
+# 3. Percentili attuali (Quanto è caro il caffè oggi rispetto alla storia?)
+curr_a = arabica.iloc[-1]
+curr_r = robusta.iloc[-1]
+pct_a = stats.percentileofscore(arabica.dropna(), curr_a)
+pct_r = stats.percentileofscore(robusta.dropna(), curr_r)
+
+# Stile e Colori Lavazza Corporate
 LAVAZZA_BLUE = "#00205B"
-GOLD = "#C49A45"      
-BROWN = "#5C3A21"     
-RED = "#A8201A"       
+GOLD = "#C49A45"      # Arabica
+BROWN = "#5C3A21"     # Robusta
+ALERT_RED = "#D32F2F"       
+OPPORTUNITY_GREEN = "#2E7D32"
 GRAY = "#808080"
 
 plt.rcParams.update({
@@ -124,76 +131,105 @@ plt.rcParams.update({
     "axes.spines.right": False,
     "axes.grid": True,
     "grid.color": "#EFEFEF",
+    "grid.linestyle": "--",
     "figure.facecolor": "white",
     "axes.facecolor": "white",
 })
 
-fig = plt.figure(figsize=(18, 16))
-gs = GridSpec(4, 2, figure=fig, hspace=0.5, wspace=0.25, top=0.92, bottom=0.06)
+fig = plt.figure(figsize=(18, 18))
+gs = GridSpec(4, 2, figure=fig, hspace=0.45, wspace=0.25, top=0.92, bottom=0.06)
 
-ax1 = fig.add_subplot(gs[0:2, :]) 
-ax2 = fig.add_subplot(gs[2, :])   
-ax3 = fig.add_subplot(gs[3, 0])   
-ax4 = fig.add_subplot(gs[3, 1])   
+ax1 = fig.add_subplot(gs[0:2, :]) # Macro-trend
+ax2 = fig.add_subplot(gs[2, :])   # Spread
+ax3 = fig.add_subplot(gs[3, 0])   # Volatilità
+ax4 = fig.add_subplot(gs[3, 1])   # Distribuzione e Percentili
 
 # -- TITOLO --
-fig.text(0.5, 0.96, "Intelligence Approvvigionamento Caffè · Mercato Globale (Convertito in EUR)", 
-         ha="center", fontsize=16, fontweight="bold", color=LAVAZZA_BLUE)
-fig.text(0.5, 0.94, f"Dati Storici e Proiezioni (Fonte: World Bank) | Tasso applicato: 1 USD = {usd_to_eur:.4f} EUR", 
-         ha="center", fontsize=10, color=GRAY)
+fig.text(0.5, 0.965, "Lavazza Procurement Intelligence: Mercato Globale del Caffè", 
+         ha="center", fontsize=18, fontweight="bold", color=LAVAZZA_BLUE)
+fig.text(0.5, 0.945, f"Analisi di Rischio, Volatilità e Spread (Fonte: World Bank) | Valuta: EUR/kg (Tasso 1 USD = {usd_to_eur:.4f} EUR)", 
+         ha="center", fontsize=11, color=GRAY)
 
-# --- PLOT 1 ---
-ax1.plot(dates, arabica, color=GOLD, alpha=0.3, linewidth=1)
-ax1.plot(dates, robusta, color=BROWN, alpha=0.3, linewidth=1)
-ax1.plot(dates, ma12_arabica, color=GOLD, linewidth=2.5, label="Arabica (Media Mobile 12m)")
-ax1.plot(dates, ma12_robusta, color=BROWN, linewidth=2.5, label="Robusta (Media Mobile 12m)")
-ax1.plot(future_dates, trend_arabica_fut, "--", color=GOLD, linewidth=2, label="Proiezione Trend Arabica")
-ax1.plot(future_dates, trend_robusta_fut, "--", color=BROWN, linewidth=2, label="Proiezione Trend Robusta")
+# ==========================================
+# PLOT 1: Trend e Bande di Volatilità (Pricing Strategy)
+# ==========================================
+ax1.plot(dates, arabica, color=GOLD, alpha=0.9, linewidth=1.5, label="Prezzo Spot Arabica")
+ax1.plot(dates, robusta, color=BROWN, alpha=0.9, linewidth=1.5, label="Prezzo Spot Robusta")
+ax1.plot(dates, ma12_arabica, color=GOLD, linestyle="--", linewidth=2, label="Trend Arabica (Media 12m)")
 
-ax1.annotate(f"€{arabica.iloc[-1]:.2f}/kg", xy=(dates.iloc[-1], arabica.iloc[-1]), 
-             xytext=(10, 0), textcoords="offset points", fontweight='bold', color=GOLD)
-ax1.annotate(f"€{robusta.iloc[-1]:.2f}/kg", xy=(dates.iloc[-1], robusta.iloc[-1]), 
-             xytext=(10, 0), textcoords="offset points", fontweight='bold', color=BROWN)
+# Fascia di normalità Arabica
+ax1.fill_between(dates, lower_band_a, upper_band_a, color=GOLD, alpha=0.15, label="Fascia di Normalità Arabica (±1 Dev. Std)")
 
-ax1.set_title("Andamento Storico e Proiezione Prezzi (EUR/kg)", fontweight="bold")
+# Annotazioni prezzi attuali
+ax1.annotate(f"Attuale: €{curr_a:.2f}", xy=(dates.iloc[-1], curr_a), 
+             xytext=(10, 5), textcoords="offset points", fontweight='bold', color=GOLD, fontsize=11)
+ax1.annotate(f"Attuale: €{curr_r:.2f}", xy=(dates.iloc[-1], curr_r), 
+             xytext=(10, -10), textcoords="offset points", fontweight='bold', color=BROWN, fontsize=11)
+
+ax1.set_title("Dinamica dei Prezzi e Deviazione dal Trend (EUR/kg)", fontweight="bold", color=LAVAZZA_BLUE, pad=10)
 ax1.set_ylabel("Prezzo EUR/kg")
-ax1.legend(loc="upper left")
+ax1.legend(loc="upper left", framealpha=0.9)
 
-# --- PLOT 2 ---
-ax2.fill_between(dates, spread, 0, where=(spread > spread.mean()), color=RED, alpha=0.3, label="Spread sopra media (Rischio Margini)")
-ax2.fill_between(dates, spread, 0, where=(spread <= spread.mean()), color=LAVAZZA_BLUE, alpha=0.2, label="Spread favorevole")
-ax2.plot(dates, spread, color=LAVAZZA_BLUE, linewidth=1.2)
-ax2.axhline(spread.mean(), color="black", linestyle="--", linewidth=1, label=f"Media Storica (€{spread.mean():.2f})")
+# ==========================================
+# PLOT 2: Spread Arabica-Robusta (Strategia di Blending)
+# ==========================================
+mean_spread = spread.mean()
+std_spread = spread.std()
+high_spread = mean_spread + std_spread
+low_spread = mean_spread - std_spread
 
-ax2.set_title("Differenziale di Prezzo Arabica/Robusta (EUR/kg)", fontweight="bold")
+ax2.plot(dates, spread, color=LAVAZZA_BLUE, linewidth=1.5)
+ax2.axhline(mean_spread, color=GRAY, linestyle="-", linewidth=1.5, label=f"Media Storica (€{mean_spread:.2f})")
+ax2.axhline(high_spread, color=ALERT_RED, linestyle="--", linewidth=1.2, label="Soglia Allerta (Arabica costosa -> Focus Robusta)")
+ax2.axhline(low_spread, color=OPPORTUNITY_GREEN, linestyle="--", linewidth=1.2, label="Soglia Opportunità (Arabica economica)")
+
+# Evidenziare le zone critiche
+ax2.fill_between(dates, spread, high_spread, where=(spread > high_spread), color=ALERT_RED, alpha=0.3)
+ax2.fill_between(dates, spread, low_spread, where=(spread < low_spread), color=OPPORTUNITY_GREEN, alpha=0.3)
+
+ax2.set_title("Differenziale Arabica - Robusta: Segnali per Ottimizzazione Blend", fontweight="bold", color=LAVAZZA_BLUE, pad=10)
 ax2.set_ylabel("Spread (EUR/kg)")
 ax2.legend(loc="upper left")
 
-# --- PLOT 3 ---
-r_corr, _ = stats.pearsonr(robusta, arabica)
-ax3.scatter(robusta, arabica, alpha=0.5, color=LAVAZZA_BLUE, edgecolors='w', s=40)
-z = np.polyfit(robusta, arabica, 1)
-p = np.poly1d(z)
-ax3.plot(robusta, p(robusta), "--", color=RED)
-ax3.set_title(f"Correlazione Mercati (Pearson r = {r_corr:.2f})", fontweight="bold")
-ax3.set_xlabel("Prezzo Robusta (EUR/kg)")
-ax3.set_ylabel("Prezzo Arabica (EUR/kg)")
+# ==========================================
+# PLOT 3: Rischio e Volatilità (Hedging Strategy)
+# ==========================================
+ax3.plot(dates, volatility_arabica, color=GOLD, linewidth=1.5, label="Volatilità Arabica")
+ax3.plot(dates, volatility_robusta, color=BROWN, linewidth=1.5, label="Volatilità Robusta")
 
-# --- PLOT 4 ---
-ax4.hist(arabica, bins=30, alpha=0.6, color=GOLD, label="Arabica", density=True)
-ax4.hist(robusta, bins=30, alpha=0.6, color=BROWN, label="Robusta", density=True)
-kde_a = stats.gaussian_kde(arabica)
-kde_r = stats.gaussian_kde(robusta)
-x_a = np.linspace(arabica.min(), arabica.max(), 100)
-x_r = np.linspace(robusta.min(), robusta.max(), 100)
-ax4.plot(x_a, kde_a(x_a), color=GOLD, linewidth=2)
-ax4.plot(x_r, kde_r(x_r), color=BROWN, linewidth=2)
-ax4.set_title("Distribuzione Storica dei Prezzi", fontweight="bold")
+# Linea di allerta arbitraria al 30% di volatilità
+ax3.axhline(30, color=ALERT_RED, linestyle=":", linewidth=1.5, label="Soglia Rischio Alto (>30%)")
+
+ax3.set_title("Indice di Volatilità Annualizzata (Rischio)", fontweight="bold", color=LAVAZZA_BLUE, pad=10)
+ax3.set_ylabel("Volatilità (%)")
+ax3.legend(loc="upper left")
+
+# ==========================================
+# PLOT 4: Posizionamento Prezzo Attuale vs Storico
+# ==========================================
+ax4.hist(arabica, bins=40, alpha=0.5, color=GOLD, label="Distribuzione Arabica storici", density=True)
+ax4.hist(robusta, bins=40, alpha=0.5, color=BROWN, label="Distribuzione Robusta storici", density=True)
+
+# Linee verticali per il prezzo attuale
+ax4.axvline(curr_a, color=GOLD, linestyle="-", linewidth=2.5)
+ax4.axvline(curr_r, color=BROWN, linestyle="-", linewidth=2.5)
+
+# Testo esplicativo sui percentili
+ax4.text(curr_a, ax4.get_ylim()[1]*0.8, f"Oggi:\n{pct_a:.0f}° Percentile", 
+         color=GOLD, fontweight='bold', ha='right' if pct_a > 50 else 'left', 
+         bbox=dict(facecolor='white', alpha=0.7, edgecolor='none'))
+
+ax4.text(curr_r, ax4.get_ylim()[1]*0.6, f"Oggi:\n{pct_r:.0f}° Percentile", 
+         color=BROWN, fontweight='bold', ha='right' if pct_r > 50 else 'left',
+         bbox=dict(facecolor='white', alpha=0.7, edgecolor='none'))
+
+ax4.set_title("Stress Test: Il Prezzo di Oggi rispetto alla Storia", fontweight="bold", color=LAVAZZA_BLUE, pad=10)
 ax4.set_xlabel("Prezzo (EUR/kg)")
 ax4.set_yticks([]) 
-ax4.legend()
+ax4.legend(loc="upper center")
 
 # --- SALVATAGGIO ---
 out_path = "data_sources/world_bank/world_bank_dashboard_lavazza.png"
 plt.savefig(out_path, dpi=160, bbox_inches="tight", facecolor="white")
 print(f"Grafico salvato con successo: {out_path}")
+#plt.show()
