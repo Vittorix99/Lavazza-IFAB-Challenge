@@ -2,7 +2,7 @@ name: lavazza_ifab
 
 services:
   n8n:
-    image: docker.n8n.io/n8nio/n8n:2.11.2
+    image: docker.n8n.io/n8nio/n8n:latest
     restart: unless-stopped
     ports:
       - "127.0.0.1:5678:5678"
@@ -18,12 +18,25 @@ services:
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
       N8N_SECURE_COOKIE: ${N8N_SECURE_COOKIE}
       N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: ${N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS}
+      NASA_FIRMS_KEY: ${NASA_FIRMS_KEY}
+      USDA_API_KEY: ${USDA_API_KEY}
     volumes:
       - n8n_data:/home/node/.n8n
       - ./local-files:/files
     depends_on:
       - mongo
       - qdrant
+      - ais-port-probe
+    networks:
+      - lavazza_internal
+
+  ais-port-probe:
+    build:
+      context: ./ais-port-probe
+    restart: unless-stopped
+    environment:
+      AISSTREAM_API_KEY: ${AISSTREAM_API_KEY}
+      PORT: 8080
     networks:
       - lavazza_internal
 
