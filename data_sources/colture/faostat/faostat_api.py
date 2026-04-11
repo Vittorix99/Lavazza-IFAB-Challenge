@@ -9,6 +9,9 @@ from scipy import stats
 from datetime import datetime
 from dotenv import load_dotenv
 import faostat
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent
 
 load_dotenv()
 
@@ -241,7 +244,7 @@ ax4.set_xticks(pct_change.index[1:])
 ax4.set_xticklabels([f"{d}s" for d in pct_change.index[1:]], rotation=30, ha="right")
 
 # ── Salvataggio ──
-out_path = "data_sources/faostat/fao_dashboard_brasile.png"
+out_path = BASE_DIR / "fao_dashboard_brasile.png"
 plt.savefig(out_path, dpi=160, bbox_inches="tight", facecolor="white")
 print(f"Grafico salvato con successo: {out_path}")
 plt.show()

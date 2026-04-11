@@ -1,0 +1,766 @@
+{
+  "name": "Lavazza - CONAB",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2000,
+        -3900
+      ],
+      "id": "manual-trigger-conab",
+      "name": "Manual Trigger"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 7 * * 1"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -2000,
+        -3780
+      ],
+      "id": "schedule-trigger-conab",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "url": "https://www.gov.br/conab/pt-br/atuacao/informacoes-agropecuarias/safras/safra-de-cafe",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1600,
+        -3840
+      ],
+      "id": "conab-index-download-node",
+      "name": "CONAB Index Download",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "function getCollectedPeriod(isoTs, cadenza) {\n  const d = new Date(isoTs || new Date().toISOString());\n  const pad = n => String(n).padStart(2, '0');\n  const yyyy = d.getUTCFullYear();\n  const mm = pad(d.getUTCMonth() + 1);\n  const dd = pad(d.getUTCDate());\n  const hh = pad(d.getUTCHours());\n  const doy = Math.floor((d - new Date(Date.UTC(yyyy,0,1))) / 86400000);\n  const week = pad(Math.ceil((doy + new Date(Date.UTC(yyyy,0,1)).getUTCDay() + 1) / 7));\n  switch((cadenza||'').toLowerCase()) {\n    case 'hourly':  return `${yyyy}-${mm}-${dd}T${hh}`;\n    case 'daily':   return `${yyyy}-${mm}-${dd}`;\n    case 'weekly':  return `${yyyy}-W${week}`;\n    case 'monthly': return `${yyyy}-${mm}`;\n    default:        return `${yyyy}-${mm}-${dd}`;\n  }\n}\nconst now = new Date().toISOString();\nconst _collectedPeriod = getCollectedPeriod(now, 'monthly');\nconst meta = $('CONAB Extract Levantamento URL').item.json;\nconst rawHtml = String($json.data ?? $json.body ?? '').trim();\nif (!rawHtml) throw new Error('CONAB: levantamento page HTML vuota');\n\nconst pdfMatch = rawHtml.match(/href=\"(https?:\\/\\/[^\"]+\\.pdf)\"/i);\nconst xlsMatch = rawHtml.match(/href=\"(https?:\\/\\/[^\"]+\\.xls[x]?)\"/i);\n\nif (!pdfMatch) throw new Error('CONAB: PDF non trovato nella pagina levantamento');\nif (!xlsMatch) throw new Error('CONAB: XLS non trovato nella pagina levantamento');\n\nconst pdfUrl  = pdfMatch[1];\nconst tableUrl = xlsMatch[1];\n\nconst publishedDateRaw = null; // non estratta dal nuovo gov.br\n\nconst releaseKey = meta.season && meta.survey_number\n  ? `${meta.season}-lev-${meta.survey_number}`\n  : pdfUrl;\n\nreturn [{\n  json: {\n    source: 'CONAB_CAFE_SAFRA',\n    source_format: 'html_index+xls+pdf',\n    country: 'BR',\n    macroarea: 'colture',\n    collected_at: now,\n    collected_period: _collectedPeriod,\n        index_url: 'https://www.gov.br/conab/pt-br/atuacao/informacoes-agropecuarias/safras/safra-de-cafe',\n    source_url: 'https://www.gov.br/conab/pt-br/atuacao/informacoes-agropecuarias/safras/safra-de-cafe',\n    levantamento_url: meta.levantamento_url,\n    release_title: meta.release_title,\n    release_key: releaseKey,\n    survey_number: meta.survey_number,\n    season: meta.season,\n    published_date_raw: publishedDateRaw,\n    pdf_url: pdfUrl,\n    table_url: tableUrl\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -880,
+        -3840
+      ],
+      "id": "conab-parse-latest-release-node",
+      "name": "CONAB Parse Latest Release"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.table_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          },
+          "allowUnauthorizedCerts": true,
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1120,
+        -3840
+      ],
+      "id": "conab-download-table-node",
+      "name": "CONAB Download Table"
+    },
+    {
+      "parameters": {
+        "operation": "xlsx",
+        "binaryPropertyName": "data",
+        "options": {
+          "includeEmptyCells": true,
+          "headerRow": false,
+          "sheetName": "1 Café Total"
+        }
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -880,
+        -3840
+      ],
+      "id": "conab-extract-table-node",
+      "name": "CONAB Extract Table"
+    },
+    {
+      "parameters": {
+        "jsCode": "function getCollectedPeriod(isoTs, cadenza) {\n  const d = new Date(isoTs || new Date().toISOString());\n  const pad = n => String(n).padStart(2, '0');\n  const yyyy = d.getUTCFullYear();\n  const mm = pad(d.getUTCMonth() + 1);\n  const dd = pad(d.getUTCDate());\n  const hh = pad(d.getUTCHours());\n  const doy = Math.floor((d - new Date(Date.UTC(yyyy,0,1))) / 86400000);\n  const week = pad(Math.ceil((doy + new Date(Date.UTC(yyyy,0,1)).getUTCDay() + 1) / 7));\n  switch((cadenza||'').toLowerCase()) {\n    case 'hourly':  return `${yyyy}-${mm}-${dd}T${hh}`;\n    case 'daily':   return `${yyyy}-${mm}-${dd}`;\n    case 'weekly':  return `${yyyy}-W${week}`;\n    case 'monthly': return `${yyyy}-${mm}`;\n    default:        return `${yyyy}-${mm}-${dd}`;\n  }\n}\nconst now = new Date().toISOString();\nconst _collectedPeriod = getCollectedPeriod(now, 'monthly');\nconst meta = $('CONAB Parse Latest Release').item.json;\nconst extractedRows = $input.all()\n  .map((item) => Array.isArray(item.json.row) ? item.json.row : [])\n  .filter((row) => row.some((value) => String(value ?? '').trim() !== ''));\n\nif (!extractedRows.length) throw new Error('CONAB table extract returned no rows');\n\nfunction normalizeText(value) {\n  return String(value ?? '').trim();\n}\n\nfunction normalizeNumber(value, decimals = 4) {\n  if (value === null || value === undefined) return null;\n  if (typeof value === 'number') {\n    if (!Number.isFinite(value)) return null;\n    return Number(value.toFixed(decimals));\n  }\n  const text = normalizeText(value);\n  if (!text || text === '-' || text === '--' || text === '…' || text === '...') return null;\n  const numeric = Number(text.replace(/\\./g, '').replace(',', '.'));\n  if (Number.isNaN(numeric)) return null;\n  return Number(numeric.toFixed(decimals));\n}\n\nconst normalizedRows = extractedRows.map((row) => row.map((cell) => normalizeText(cell).toLowerCase()));\nconst headerIndex = normalizedRows.findIndex((row) => row.includes('(d)') && row.includes('(f)'));\nif (headerIndex === -1) throw new Error('CONAB table markers (d) and (f) not found');\nconst yieldColumn = normalizedRows[headerIndex].findIndex((value) => value === '(d)');\nconst productionColumn = normalizedRows[headerIndex].findIndex((value) => value === '(f)');\nconst regionColumn = 0;\n\nconst ufMap = {\n  MG: 'Minas Gerais', ES: 'Espírito Santo', SP: 'São Paulo', PR: 'Paraná', BA: 'Bahia', RO: 'Rondônia', GO: 'Goiás',\n  MT: 'Mato Grosso', RJ: 'Rio de Janeiro', PE: 'Pernambuco', AC: 'Acre', CE: 'Ceará', PA: 'Pará', AM: 'Amazonas'\n};\nconst focusUfs = ['MG', 'ES', 'BA', 'RO'];\n\nconst stateRows = extractedRows\n  .slice(headerIndex + 1)\n  .map((row) => ({\n    uf: normalizeText(row[regionColumn]).toUpperCase(),\n    production_raw: normalizeNumber(row[productionColumn], 4),\n    yield_raw: normalizeNumber(row[yieldColumn], 4)\n  }))\n  .filter((row) => /^[A-Z]{2}$/.test(row.uf))\n  .map((row) => ({\n    uf: row.uf,\n    state: ufMap[row.uf] || row.uf,\n    production_thousand_60kg_bags: row.production_raw,\n    yield_60kg_bags_per_ha: row.yield_raw,\n    production_mt: row.production_raw === null ? null : Number((row.production_raw * 60).toFixed(4)),\n    yield_kgha: row.yield_raw === null ? null : Number((row.yield_raw * 60).toFixed(4))\n  }))\n  .filter((row) => row.production_mt !== null || row.yield_kgha !== null);\n\nif (!stateRows.length) throw new Error('CONAB table produced no state rows');\n\nconst validProductionRows = stateRows.filter((row) => row.production_mt !== null);\nconst totalProductionMt = validProductionRows.reduce((sum, row) => sum + row.production_mt, 0);\nconst topStatesByProduction = [...validProductionRows]\n  .sort((a, b) => (b.production_mt ?? -Infinity) - (a.production_mt ?? -Infinity))\n  .slice(0, 10)\n  .map((row) => ({\n    uf: row.uf,\n    state: row.state,\n    production_mt: row.production_mt,\n    share_of_total_pct: totalProductionMt ? Number(((row.production_mt / totalProductionMt) * 100).toFixed(4)) : null,\n    yield_kgha: row.yield_kgha\n  }));\nconst focusStates = focusUfs.map((uf) => {\n  const row = stateRows.find((entry) => entry.uf === uf) || { uf, state: ufMap[uf] || uf, production_mt: null, yield_kgha: null, production_thousand_60kg_bags: null, yield_60kg_bags_per_ha: null };\n  return {\n    ...row,\n    share_of_total_pct: row.production_mt !== null && totalProductionMt ? Number(((row.production_mt / totalProductionMt) * 100).toFixed(4)) : null\n  };\n});\nconst focusProductionMt = focusStates.reduce((sum, row) => sum + (row.production_mt ?? 0), 0);\nconst focusSharePct = totalProductionMt ? Number(((focusProductionMt / totalProductionMt) * 100).toFixed(4)) : null;\nconst bestYieldState = [...stateRows].filter((row) => row.yield_kgha !== null).sort((a, b) => b.yield_kgha - a.yield_kgha)[0] || null;\nconst lowestYieldState = [...stateRows].filter((row) => row.yield_kgha !== null).sort((a, b) => a.yield_kgha - b.yield_kgha)[0] || null;\n\nreturn [{\n  json: {\n    ...meta,\n    source_format: 'html_index+xls',\n    country: 'BR',\n    macroarea: 'colture',\n    dataset: 'CONAB_CAFE_BULLETIN',\n    collected_at: now,\n    collected_period: _collectedPeriod,\n        states_covered: stateRows.length,\n    units: {\n      production_raw: 'thousand_60kg_bags',\n      production_normalized: 'metric_tons',\n      yield_raw: '60kg_bags_per_ha',\n      yield_normalized: 'kg_per_ha'\n    },\n    national_snapshot: {\n      total_production_mt: Number(totalProductionMt.toFixed(4)),\n      focus_states_total_production_mt: Number(focusProductionMt.toFixed(4)),\n      focus_states_share_pct: focusSharePct,\n      best_yield_state: bestYieldState ? { uf: bestYieldState.uf, state: bestYieldState.state, yield_kgha: bestYieldState.yield_kgha } : null,\n      lowest_yield_state: lowestYieldState ? { uf: lowestYieldState.uf, state: lowestYieldState.state, yield_kgha: lowestYieldState.yield_kgha } : null\n    },\n    focus_states: focusStates,\n    top_states_by_production: topStatesByProduction,\n    all_states: stateRows\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -640,
+        -3840
+      ],
+      "id": "conab-parse-table-node",
+      "name": "CONAB Parse Table"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.pdf_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          },
+          "allowUnauthorizedCerts": true,
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -400,
+        -3840
+      ],
+      "id": "conab-download-pdf-node",
+      "name": "CONAB Download PDF"
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "data",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -160,
+        -3840
+      ],
+      "id": "conab-extract-pdf-node",
+      "name": "CONAB Extract PDF"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ JSON.stringify({ release_title: $('CONAB Parse Table').item.json.release_title, survey_number: $('CONAB Parse Table').item.json.survey_number, season: $('CONAB Parse Table').item.json.season, published_date_raw: $('CONAB Parse Table').item.json.published_date_raw, published_time_raw: $('CONAB Parse Table').item.json.published_time_raw, national_snapshot: $('CONAB Parse Table').item.json.national_snapshot, focus_states: $('CONAB Parse Table').item.json.focus_states, top_states_by_production: $('CONAB Parse Table').item.json.top_states_by_production, release_excerpt: $('CONAB Parse Table').item.json.release_excerpt, pdf_text: String($json.text ?? $json.content ?? $json.data ?? JSON.stringify($json)).replace(/\\s+/g, ' ').slice(0, 14000) }, null, 2) }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are interpreting a CONAB coffee crop bulletin for a Lavazza intelligence system. Focus on Brazil and especially Minas Gerais, Espírito Santo, Bahia, and Rondônia. Use only the provided structured metrics and PDF text excerpt. Return only valid JSON.\n\nOutput format:\n{\n  \"movement_label\": \"supply_tightening|supply_expanding|regional_shift|mixed\",\n  \"signals\": [\"...\"],\n  \"summary_en\": \"...\"\n}\n\nRules:\n- signals: max 6 short strings about production, yields, concentration, or regional crop risk\n- movement_label must summarize the overall coffee supply picture in Brazil\n- use regional_shift when the national total is less informative than the geographic pattern across the focus states\n- summary_en must be 1-2 English sentences\n- return JSON only, with no extra text."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        80,
+        -3840
+      ],
+      "id": "conab-ai-signals-chain-node",
+      "name": "CONAB AI Signals"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5.4",
+          "mode": "list",
+          "cachedResultName": "gpt-5.4"
+        },
+        "builtInTools": {},
+        "options": {
+          "maxRetries": 2
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        80,
+        -3640
+      ],
+      "id": "conab-openai-signals-node",
+      "name": "CONAB OpenAI Signals Model",
+      "retryOnFail": true,
+      "credentials": {
+        "openAiApi": {
+          "id": "0Vum5STk59lUOybm",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const parsed = JSON.parse(($json.text || '').trim());\nconst base = $('CONAB Parse Table').item.json;\nconst pdfSource = $('CONAB Extract PDF').item.json;\nconst pdfText = String(pdfSource.text ?? pdfSource.content ?? pdfSource.data ?? JSON.stringify(pdfSource)).replace(/\\s+/g, ' ').trim();\nconst excerpt = pdfText.slice(0, 3000);\nconst pdfExcerpt = pdfText.slice(0, 6000);\nconst embedText = [parsed.summary_en || '', ...(Array.isArray(parsed.signals) ? parsed.signals : []), excerpt.slice(0, 1200)].filter(Boolean).join(' ');\n\nreturn [{\n  json: {\n    ...base,\n    pdf_excerpt: pdfExcerpt,\n    source_format: 'html_index+xls+pdf',\n    source_url: base.source_url || base.index_url || base.levantamento_url || base.pdf_url || null,\n    movement_label: parsed.movement_label || 'mixed',\nsignals: Array.isArray(parsed.signals) ? parsed.signals : [],\n    summary_en: parsed.summary_en || '',\n    report_text_excerpt: excerpt,\n    embed_text: embedText\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        -3840
+      ],
+      "id": "conab-parse-signals-node",
+      "name": "CONAB Parse Signals"
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "raw_crops",
+        "options": {},
+        "fields": "source,source_url,source_format,index_url,collected_at,release_title,survey_number,season,published_date_raw,pdf_url,table_url,release_key,country,macroarea,dataset,states_covered,units,national_snapshot,focus_states,top_states_by_production,all_states,movement_label,signals,summary_en,report_text_excerpt,embed_text,pdf_excerpt"
+      },
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        540,
+        -3840
+      ],
+      "id": "conab-mongo-raw-crops-node",
+      "name": "CONAB MongoDB raw_crops",
+      "credentials": {
+        "mongoDb": {
+          "id": "Jo4ZHZCY4HM8JRrD",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "text-embedding-3-small"
+            },
+            {
+              "name": "input",
+              "value": "={{ $('CONAB Parse Signals').item.json.embed_text }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        760,
+        -3840
+      ],
+      "id": "conab-embeddings-node",
+      "name": "CONAB OpenAI Embeddings",
+      "credentials": {
+        "openAiApi": {
+          "id": "0Vum5STk59lUOybm",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// Calcola collected_period da collected_at + cadenza\nfunction getCollectedPeriod(collectedAt, cadenza) {\n  const d = new Date(collectedAt || new Date().toISOString());\n  const pad = (n) => String(n).padStart(2, '0');\n  const yyyy = d.getUTCFullYear();\n  const mm = pad(d.getUTCMonth() + 1);\n  const dd = pad(d.getUTCDate());\n  const hh = pad(d.getUTCHours());\n  // ISO week number\n  const startOfYear = new Date(Date.UTC(yyyy, 0, 1));\n  const weekNo = pad(Math.ceil(((d - startOfYear) / 86400000 + startOfYear.getUTCDay() + 1) / 7));\n  switch((cadenza || '').toLowerCase()) {\n    case 'hourly':  return `${yyyy}-${mm}-${dd}T${hh}`;\n    case 'daily':   return `${yyyy}-${mm}-${dd}`;\n    case 'weekly':  return `${yyyy}-W${weekNo}`;\n    case 'monthly': return `${yyyy}-${mm}`;\n    default:        return `${yyyy}-${mm}-${dd}`;\n  }\n}\n\nconst _cadenza = 'monthly';\nconst _collectedAt = now || new Date().toISOString();\nconst _collectedPeriod = getCollectedPeriod(_collectedAt, _cadenza);\nconst meta = $('CONAB Parse Signals').item.json;\nconst vector = $json.data[0].embedding;\nconst key = meta.release_key || meta.pdf_url || meta.release_title || '';\nlet hash = 0;\nfor (let i = 0; i < key.length; i++) {\n  hash = ((hash << 5) - hash) + key.charCodeAt(i);\n  hash |= 0;\n}\nconst pointId = Math.abs(hash);\n\nreturn [{\n  json: {\n    points: [{\n      id: pointId,\n      vector,\n      payload: {\n        source: meta.source,\n        country: meta.country,\n        macroarea: meta.macroarea,\n        collected_at: meta.collected_at,\n        release_title: meta.release_title,\n        survey_number: meta.survey_number,\n        season: meta.season,\n        published_date_raw: meta.published_date_raw,\n        pdf_url: meta.pdf_url,\n        table_url: meta.table_url,\n        movement_label: meta.movement_label,\nsummary_en: meta.summary_en,\n        signals: meta.signals\n      }\n    }]\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        980,
+        -3840
+      ],
+      "id": "conab-qdrant-payload-node",
+      "name": "CONAB Build Qdrant Payload"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "http://qdrant:6333/collections/crops_texts/points",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1200,
+        -3840
+      ],
+      "id": "conab-qdrant-upsert-node",
+      "name": "CONAB Qdrant Upsert"
+    },
+    {
+      "parameters": {
+        "jsCode": "const now = new Date().toISOString();\nconst meta = $('CONAB Parse Signals').item.json;\n\nreturn [{\n  json: {\n    source: 'CONAB_CAFE_SAFRA',\n    country: 'BR',\n    macroarea: 'colture',\n    cadenza: 'weekly',\n    run_date: now,\n    status: 'done',\n    completed_at: now,\n    survey_number: meta.survey_number || null,\n    season: meta.season || null,\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1420,
+        -3840
+      ],
+      "id": "conab-build-log-node",
+      "name": "CONAB Build Ingestion Log"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "collection": "ingestion_log",
+        "options": {
+          "upsert": true
+        },
+        "fields": "source,country,macroarea,cadenza,run_date,status,completed_at,report_period,survey_number,season,market_year,latest_year,quote_date,total_detections,latest_period,enso_phase,items_ingested,ports_monitored",
+        "filter": "{ \"source\": \"CONAB_CAFE_SAFRA\", \"country\": \"BR\", \"run_date\": {{ $json.run_date }} }"
+      },
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        1640,
+        -3840
+      ],
+      "id": "conab-mongo-log-node",
+      "name": "CONAB MongoDB ingestion_log",
+      "credentials": {
+        "mongoDb": {
+          "id": "Jo4ZHZCY4HM8JRrD",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const html = String($json.data ?? $json.body ?? '');\nif (!html) throw new Error('CONAB: index page HTML vuota');\n\nconst links = [...html.matchAll(/href=\"(https:\\/\\/www\\.gov\\.br\\/conab\\/pt-br\\/atuacao\\/informacoes-agropecuarias\\/safras\\/safra-de-cafe\\/[^\"]*levantamento[^\"]*\\/[^\"]*)\"/gi)];\nif (!links.length) throw new Error('CONAB: nessun link levantamento trovato nella index page');\n\nconst levUrl = links[0][1];\n\nconst urlMatch = levUrl.match(/\\/(\\d+)[oa][-]levantamento-de-cafe-safra-(\\d{4})\\//i);\nconst surveyNumber = urlMatch ? parseInt(urlMatch[1]) : null;\nconst season = urlMatch ? urlMatch[2] : null;\nconst releaseTitle = surveyNumber && season ? `${surveyNumber}º Levantamento Café - Safra ${season}` : levUrl;\n\nreturn [{ json: { levantamento_url: levUrl, survey_number: surveyNumber, season, release_title: releaseTitle } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1360,
+        -3840
+      ],
+      "id": "conab-extract-lev-url-node",
+      "name": "CONAB Extract Levantamento URL"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.levantamento_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1120,
+        -3840
+      ],
+      "id": "conab-fetch-lev-page-node",
+      "name": "CONAB Fetch Levantamento Page"
+    },
+    {
+      "id": "45b37110-fcd1-4514-9a41-42bf15e10bb3",
+      "name": "API Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1380,
+        -3840
+      ],
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst err = item.json?.error ?? item.error?.message ?? '';\nconst statusCode = item.json?.statusCode ?? item.json?.status ?? 0;\nif (err || statusCode >= 400) {\n  return [{ json: {\n    _api_skip: true,\n    source: '03_CONAB',\n    country: 'BR',\n    status: 'skipped_api_error',\n    reason: `API unavailable: ${err || 'HTTP ' + statusCode}`,\n    run_date: new Date().toISOString(),\n    completed_at: new Date().toISOString()\n  } }];\n}\nreturn [{ json: item.json }];"
+      }
+    },
+    {
+      "id": "bcc0e055-5424-4bdb-87a2-c06aa93400dd",
+      "name": "API Skip?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1160,
+        -3840
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "62a44424-d724-4d08-a376-4af722868c6e",
+              "leftValue": "={{ $json._api_skip }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "771c5716-84f6-49ea-9bf5-67ff3bc633b8",
+      "name": "Return Status",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1840,
+        -3840
+      ],
+      "parameters": {
+        "mode": "manual",
+        "duplicateItem": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c4312759-1346-40aa-ad4c-ab20045825bf",
+              "name": "workflow",
+              "value": "=03-conab",
+              "type": "string"
+            },
+            {
+              "id": "7dd57b0e-4d9f-4e14-ab4a-0d1e72b89561",
+              "name": "status",
+              "value": "={{ $json.status || 'done' }}",
+              "type": "string"
+            },
+            {
+              "id": "e2336a3f-d708-4927-bc96-1db9d64c218c",
+              "name": "completed_at",
+              "value": "={{ new Date().toISOString() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "CONAB Index Download": {
+      "main": [
+        [
+          {
+            "node": "API Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CONAB Parse Latest Release": {
+      "main": [
+        [
+          {
+            "node": "CONAB Download Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CONAB Download Table": {
+      "main": [
+        [
+          {
+            "node": "CONAB Extract Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CONAB Extract Table": {
+      "main": [
+        [
+          {
+            "node": "CONAB Parse Table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CONAB Parse Table": {
+      "main": [
+        [
+          {
+            "node": "CONAB Download PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CONAB Download PDF": {
+      "main": [
+        [
+          {
+            "node": "CONAB Extract PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CONAB Extract PDF": {
+      "main": [
+        [
+          {
+            "node": "CONAB AI Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CONAB OpenAI Signals Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "CONAB AI Signals",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CONAB AI Signals": {
+      "main": [
+        [
+          {
+            "node": "CONAB Parse Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CONAB Parse Signals": {
+      "main": [
+        [
+          {
+            "node": "CONAB MongoDB raw_crops",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CONAB MongoDB raw_crops": {
+      "main": [
+        [
+          {
+            "node": "CONAB OpenAI Embeddings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CONAB OpenAI Embeddings": {
+      "main": [
+        [
+          {
+            "node": "CONAB Build Qdrant Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CONAB Build Qdrant Payload": {
+      "main": [
+        [
+          {
+            "node": "CONAB Qdrant Upsert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CONAB Qdrant Upsert": {
+      "main": [
+        [
+          {
+            "node": "CONAB Build Ingestion Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CONAB Build Ingestion Log": {
+      "main": [
+        [
+          {
+            "node": "CONAB MongoDB ingestion_log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CONAB Extract Levantamento URL": {
+      "main": [
+        [
+          {
+            "node": "CONAB Fetch Levantamento Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CONAB Fetch Levantamento Page": {
+      "main": [
+        [
+          {
+            "node": "CONAB Parse Latest Release",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "CONAB Index Download",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "CONAB Index Download",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Check": {
+      "main": [
+        [
+          {
+            "node": "API Skip?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Skip?": {
+      "main": [
+        [
+          {
+            "node": "CONAB MongoDB ingestion_log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "CONAB Extract Levantamento URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CONAB MongoDB ingestion_log": {
+      "main": [
+        [
+          {
+            "node": "Return Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "CONAB Index Download",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Return Status": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "tags": [],
+  "id": "2CzBgXVDXajM9u3Z"
+}

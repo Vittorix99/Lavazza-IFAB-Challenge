@@ -9,6 +9,9 @@ from scipy import stats
 from bs4 import BeautifulSoup
 import re
 from urllib.parse import urljoin
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent
 
 # ==========================================
 # 0. SCRAPING PER TROVARE L'ULTIMO REPORT (CONAB)
@@ -80,7 +83,7 @@ print(f"Link Excel trovato: {excel_link}")
 response = requests.get(excel_link)
 response.raise_for_status()
 
-file_path = "data_sources/conab/conab_data.xls"
+file_path = BASE_DIR / "conab_data.xls"
 with open(file_path, "wb") as f:
     f.write(response.content)
 
@@ -295,7 +298,7 @@ ax4.set_xlabel("Quota % dell'offerta totale")
 ax4.set_xlim(0, pie_data['pct_share'].max() * 1.3)
 
 # ── Salvataggio ──
-out_path = "data_sources/conab/conab_dashboard_lavazza_intelligence.png"
+out_path = BASE_DIR / "conab_dashboard_lavazza_intelligence.png"
 plt.savefig(out_path, dpi=160, bbox_inches="tight", facecolor="white")
 print(f"Grafico Intelligence salvato con successo: {out_path}")
 #plt.show()

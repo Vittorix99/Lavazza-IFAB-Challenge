@@ -7,6 +7,9 @@ import matplotlib.ticker as mticker
 from matplotlib.gridspec import GridSpec
 from scipy import stats
 from dotenv import load_dotenv
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent
 
 # ==========================================
 # 1. CONFIGURATION & SETUP
@@ -238,8 +241,8 @@ ax4r.legend(loc="upper right", framealpha=0.9, fontsize=9)
 # ==========================================
 # 6. SAVE & DISPLAY
 # ==========================================
-out_path = "data_sources/usda/usda_supply_risk_dashboard.png"
-os.makedirs(os.path.dirname(out_path), exist_ok=True)
+out_path = BASE_DIR / "usda_supply_risk_dashboard.png"
+BASE_DIR.mkdir(parents=True, exist_ok=True)
 plt.savefig(out_path, dpi=150, bbox_inches="tight", facecolor="white")
 print(f"\nDashboard saved successfully: {out_path}")
 #plt.show()

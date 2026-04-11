@@ -1,0 +1,442 @@
+{
+  "name": "Lavazza - NOAA ENSO",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2000,
+        -980
+      ],
+      "id": "manual-trigger-noaa",
+      "name": "Manual Trigger"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 1 * *"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -2000,
+        -860
+      ],
+      "id": "schedule-trigger-noaa",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "url": "https://psl.noaa.gov/data/correlation/oni.data",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1600,
+        -920
+      ],
+      "id": "noaa-enso-download-node",
+      "name": "NOAA ENSO Download",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "function getCollectedPeriod(isoTs, cadenza) {\n  const d = new Date(isoTs || new Date().toISOString());\n  const pad = n => String(n).padStart(2, '0');\n  const yyyy = d.getUTCFullYear();\n  const mm = pad(d.getUTCMonth() + 1);\n  const dd = pad(d.getUTCDate());\n  const hh = pad(d.getUTCHours());\n  const doy = Math.floor((d - new Date(Date.UTC(yyyy,0,1))) / 86400000);\n  const week = pad(Math.ceil((doy + new Date(Date.UTC(yyyy,0,1)).getUTCDay() + 1) / 7));\n  switch((cadenza||'').toLowerCase()) {\n    case 'hourly':  return `${yyyy}-${mm}-${dd}T${hh}`;\n    case 'daily':   return `${yyyy}-${mm}-${dd}`;\n    case 'weekly':  return `${yyyy}-W${week}`;\n    case 'monthly': return `${yyyy}-${mm}`;\n    default:        return `${yyyy}-${mm}-${dd}`;\n  }\n}\nconst now = new Date().toISOString();\nconst _collectedPeriod = getCollectedPeriod(now, 'monthly');\nconst expectedFreshnessHours = 24 * 35;\nconst isFresh = (new Date() - new Date(now)) / 3600000 < expectedFreshnessHours;\n\nconst months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];\n\nconst rows = [];\nfor (const line of raw.split(/\\r?\\n/)) {\n  const parts = line.trim().split(/\\s+/);\n  if (parts.length < 13) continue;\n\n  const year = Number(parts[0]);\n  if (!Number.isInteger(year) || year < 1950) continue;\n\n  for (let i = 0; i < months.length; i++) {\n    const value = Number(parts[i + 1]);\n    if (Number.isNaN(value) || value < -10) continue;\n\n    rows.push({\n      year,\n      month: months[i],\n      month_number: i + 1,\n      period: `${year}-${String(i + 1).padStart(2, '0')}`,\n      period_label: `${year}-${months[i]}`,\n      oni_value: Number(value.toFixed(2))\n    });\n  }\n}\n\nif (!rows.length) {\n  throw new Error('No valid ONI values parsed from NOAA ENSO file');\n}\n\nconst latest = rows[rows.length - 1];\nconst recentSeries = rows.slice(-6);\n\nlet ensoPhase = 'NEUTRAL';\nlet phaseStrength = 'neutral';\nlet alertLevel = 'LOW';\nlet impactForecast = 'No major ENSO-driven climate disruptions expected.';\nlet northNortheastImpact = 'No strong ENSO-driven anomaly signaled.';\nlet southImpact = 'No strong ENSO-driven anomaly signaled.';\nlet summaryEn = `Latest NOAA ONI reading for ${latest.period_label} is ${latest.oni_value.toFixed(2)}, indicating a neutral ENSO phase. No major ENSO-driven climate disruption is currently signaled for Brazil.`;\nlet signals = [\n  'ENSO phase neutral',\n  `Latest ONI anomaly ${latest.oni_value.toFixed(2)}`,\n  'No major ENSO-driven disruption signaled for Brazil'\n];\n\nif (latest.oni_value >= 0.5) {\n  ensoPhase = 'EL_NINO';\n  alertLevel = 'MODERATE';\n  phaseStrength = 'moderate';\n  impactForecast = 'Possible water shortages in North and Northeast Brazil; increased rainfall in Southern Brazil.';\n  northNortheastImpact = 'Drier and hotter conditions with higher drought and wildfire risk.';\n  southImpact = 'Wetter conditions with higher heavy-rain and flooding risk.';\n  summaryEn = `Latest NOAA ONI reading for ${latest.period_label} is ${latest.oni_value.toFixed(2)}, indicating El Nino conditions. Brazil faces higher drought pressure in North and Northeast regions and higher rainfall risk in the South.`;\n  signals = [\n    'ENSO phase El Nino',\n    `Latest ONI anomaly ${latest.oni_value.toFixed(2)}`,\n    'North and Northeast Brazil drought risk elevated',\n    'Southern Brazil heavy rainfall risk elevated'\n  ];\n\n  if (latest.oni_value >= 1.5) {\n    alertLevel = 'CRITICAL';\n    phaseStrength = 'strong';\n    impactForecast = 'High risk of drought in Amazon and Northeast Brazil; severe flood risk in Southern Brazil.';\n    northNortheastImpact = 'Strong drought and wildfire pressure across Amazon and Northeast Brazil.';\n    southImpact = 'Strong heavy-rain and flood pressure in Southern Brazil.';\n    summaryEn = `Latest NOAA ONI reading for ${latest.period_label} is ${latest.oni_value.toFixed(2)}, indicating a strong El Nino phase. Brazil faces severe drought pressure in Amazon and Northeast regions and severe flood risk in the South.`;\n    signals = [\n      'ENSO phase strong El Nino',\n      `Latest ONI anomaly ${latest.oni_value.toFixed(2)}`,\n      'Amazon and Northeast Brazil drought risk critical',\n      'Southern Brazil flood risk critical'\n    ];\n  }\n} else if (latest.oni_value <= -0.5) {\n  ensoPhase = 'LA_NINA';\n  alertLevel = 'MODERATE';\n  phaseStrength = 'moderate';\n  impactForecast = 'Drier conditions likely in Southern Brazil; wetter conditions in North and Northeast Brazil.';\n  northNortheastImpact = 'Wetter conditions with higher river flooding risk.';\n  southImpact = 'Drier conditions with higher agricultural drought risk.';\n  summaryEn = `Latest NOAA ONI reading for ${latest.period_label} is ${latest.oni_value.toFixed(2)}, indicating La Nina conditions. Brazil faces higher dryness risk in the South and wetter conditions in North and Northeast regions.`;\n  signals = [\n    'ENSO phase La Nina',\n    `Latest ONI anomaly ${latest.oni_value.toFixed(2)}`,\n    'Southern Brazil drought risk elevated',\n    'North and Northeast Brazil flood risk elevated'\n  ];\n\n  if (latest.oni_value <= -1.5) {\n    alertLevel = 'CRITICAL';\n    phaseStrength = 'strong';\n    impactForecast = 'High risk of drought in Southern Brazil crops; flood risk in North and Northeast Brazil.';\n    northNortheastImpact = 'Strong wet conditions with flood pressure in North and Northeast Brazil.';\n    southImpact = 'Strong agricultural drought pressure in Southern Brazil.';\n    summaryEn = `Latest NOAA ONI reading for ${latest.period_label} is ${latest.oni_value.toFixed(2)}, indicating a strong La Nina phase. Brazil faces critical southern dryness pressure and elevated flood risk in North and Northeast regions.`;\n    signals = [\n      'ENSO phase strong La Nina',\n      `Latest ONI anomaly ${latest.oni_value.toFixed(2)}`,\n      'Southern Brazil crop drought risk critical',\n      'North and Northeast Brazil flood risk elevated'\n    ];\n  }\n}\n\nreturn [{\n  json: {\n    source: 'NOAA_ENSO',\n    source_url: sourceUrl,\n    country: 'BR',\n    macroarea: 'environment',\n    collected_at: now,\n    collected_period: _collectedPeriod,\n        is_fresh: isFresh,\n    latest_period: latest.period,\n    latest_period_label: latest.period_label,\n    latest_year: latest.year,\n    latest_month: latest.month,\n    latest_month_number: latest.month_number,\n    oni_value: latest.oni_value,\n    enso_phase: ensoPhase,\n    phase_strength: phaseStrength,\n    alert_level: alertLevel,\n    impact_forecast: impactForecast,\n    brazil_impact_north_northeast: northNortheastImpact,\n    brazil_impact_south: southImpact,\n    summary_en: summaryEn,\n    signals,\n    history_window_months: recentSeries.length,\n    recent_series: recentSeries,\n    _chart_fields: [\"recent_series\"]\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1360,
+        -920
+      ],
+      "id": "noaa-enso-parse-node",
+      "name": "NOAA ENSO Parse"
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "raw_environment",
+        "options": {},
+        "fields": "source,source_url,country,macroarea,collected_at,latest_period,latest_period_label,latest_year,latest_month,latest_month_number,oni_value,enso_phase,phase_strength,alert_level,impact_forecast,brazil_impact_north_northeast,brazil_impact_south,summary_en,signals,history_window_months,recent_series"
+      },
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        -1120,
+        -920
+      ],
+      "id": "noaa-mongo-raw-environment-node",
+      "name": "NOAA MongoDB raw_environment",
+      "credentials": {
+        "mongoDb": {
+          "id": "Jo4ZHZCY4HM8JRrD",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const now = new Date().toISOString();\nconst meta = $('NOAA Parse Signals').item.json;\n\nreturn [{\n  json: {\n    source: 'NOAA_ENSO',\n    country: 'BR',\n    macroarea: 'environment',\n    cadenza: 'monthly',\n    run_date: now,\n    status: 'done',\n    completed_at: now,\n    latest_period: meta.latest_period || null,\n    enso_phase: meta.enso_phase || null,\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -880,
+        -920
+      ],
+      "id": "noaa-build-log-node",
+      "name": "NOAA Build Ingestion Log"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "collection": "ingestion_log",
+        "options": {
+          "upsert": true
+        },
+        "fields": "source,country,macroarea,cadenza,run_date,status,completed_at,report_period,survey_number,season,market_year,latest_year,quote_date,total_detections,latest_period,enso_phase,items_ingested,ports_monitored",
+        "filter": "{ \"source\": \"NOAA_ENSO\", \"country\": \"BR\", \"run_date\": {{ $json.run_date }} }"
+      },
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        -640,
+        -920
+      ],
+      "id": "noaa-mongo-log-node",
+      "name": "NOAA MongoDB ingestion_log",
+      "credentials": {
+        "mongoDb": {
+          "id": "Jo4ZHZCY4HM8JRrD",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ JSON.stringify({ latest_period_label: $json.latest_period_label, oni_value: $json.oni_value, enso_phase: $json.enso_phase, phase_strength: $json.phase_strength, alert_level: $json.alert_level, impact_forecast: $json.impact_forecast, brazil_impact_north_northeast: $json.brazil_impact_north_northeast, brazil_impact_south: $json.brazil_impact_south, movement_label: $json.movement_label, rule_based_signals: $json.signals, fallback_summary_en: $json.summary_en }, null, 2) }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are interpreting NOAA ENSO climate index data for a Lavazza coffee intelligence system focused on Brazil. La Niña (ONI < -0.5): typically reduced rainfall in northeastern Brazil, erratic in the south. El Niño (ONI > 0.5): typically excess rainfall in southern Brazil, drought risk in the northeast. Neutral (-0.5 to +0.5): generally stable conditions. Describe the current ENSO state and typical associated regional patterns factually.\n\nOutput format:\n{\n  \"movement_label\": \"...\",\n  \"signals\": [\"...\"],\n  \"summary_en\": \"...\"\n}\n\nmovement_label options: la_nina_active|el_nino_active|enso_neutral|enso_developing\nRules:\n- signals: max 5 short English strings describing observable facts\n- DO NOT assign positive/negative valence — just describe what is happening\n- movement_label: one concise label describing the current situation\n- summary_en: 1-2 English sentences, factual only\n- return JSON only, no extra text"
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
+      "position": [
+        -880,
+        -920
+      ],
+      "id": "noaa-ai-signals-node",
+      "name": "NOAA AI Signals"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {
+          "maxRetries": 2
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -880,
+        -720
+      ],
+      "id": "noaa-openai-signals-node",
+      "name": "NOAA OpenAI Signals Model",
+      "retryOnFail": true,
+      "credentials": {
+        "openAiApi": {
+          "id": "0Vum5STk59lUOybm",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = ($json.text || '').trim();\nconst cleaned = raw.replace(/^```json\\s*/i,'').replace(/^```\\s*/i,'').replace(/```$/i,'').trim();\nconst parsed = JSON.parse(cleaned);\nconst base = $('NOAA ENSO Parse').item.json;\n\nreturn [{ json: {\n  ...base,\n  rule_based_signals: Array.isArray(base.signals) ? base.signals : [],\n  rule_based_movement_label: base.movement_label || 'mixed',\n  fallback_summary_en: base.summary_en || '',\n  movement_label: parsed.movement_label || base.movement_label || 'mixed',\n  signals: Array.isArray(parsed.signals) && parsed.signals.length ? parsed.signals : (Array.isArray(base.signals) ? base.signals : []),\n  summary_en: parsed.summary_en || base.summary_en || ''\n}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -640,
+        -920
+      ],
+      "id": "noaa-parse-signals-node",
+      "name": "NOAA Parse Signals"
+    },
+    {
+      "id": "d0a3e82b-608a-43ef-b45a-9551fc03ebab",
+      "name": "API Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1380,
+        -920
+      ],
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst err = item.json?.error ?? item.error?.message ?? '';\nconst statusCode = item.json?.statusCode ?? item.json?.status ?? 0;\nif (err || statusCode >= 400) {\n  return [{ json: {\n    _api_skip: true,\n    source: '11_NOAA_ENSO',\n    country: 'BR',\n    status: 'skipped_api_error',\n    reason: `API unavailable: ${err || 'HTTP ' + statusCode}`,\n    run_date: new Date().toISOString(),\n    completed_at: new Date().toISOString()\n  } }];\n}\nreturn [{ json: item.json }];"
+      }
+    },
+    {
+      "id": "9b49f35a-0780-498b-9838-87ef8bd7f4f6",
+      "name": "API Skip?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1160,
+        -920
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "70c13db9-1a4b-413d-ba0b-89a1a501e54d",
+              "leftValue": "={{ $json._api_skip }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "3591a777-0239-400c-9d42-a226c212c4fa",
+      "name": "Return Status",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -440,
+        -920
+      ],
+      "parameters": {
+        "mode": "manual",
+        "duplicateItem": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "68f6e0c5-f40b-4a4a-9ecc-24fa0b62ac4c",
+              "name": "workflow",
+              "value": "=11-noaa-enso",
+              "type": "string"
+            },
+            {
+              "id": "d7bc8ec4-3130-4aab-beea-e1c39a31c7eb",
+              "name": "status",
+              "value": "={{ $json.status || 'done' }}",
+              "type": "string"
+            },
+            {
+              "id": "87da0d58-79cd-4e30-b0ef-89eb25945cd1",
+              "name": "completed_at",
+              "value": "={{ new Date().toISOString() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "NOAA ENSO Download": {
+      "main": [
+        [
+          {
+            "node": "API Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NOAA ENSO Parse": {
+      "main": [
+        [
+          {
+            "node": "NOAA AI Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NOAA MongoDB raw_environment": {
+      "main": [
+        [
+          {
+            "node": "NOAA Build Ingestion Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NOAA Build Ingestion Log": {
+      "main": [
+        [
+          {
+            "node": "NOAA MongoDB ingestion_log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NOAA OpenAI Signals Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "NOAA AI Signals",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NOAA AI Signals": {
+      "main": [
+        [
+          {
+            "node": "NOAA Parse Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NOAA Parse Signals": {
+      "main": [
+        [
+          {
+            "node": "NOAA MongoDB raw_environment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "NOAA ENSO Download",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "NOAA ENSO Download",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Check": {
+      "main": [
+        [
+          {
+            "node": "API Skip?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Skip?": {
+      "main": [
+        [
+          {
+            "node": "NOAA MongoDB ingestion_log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "NOAA ENSO Parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NOAA MongoDB ingestion_log": {
+      "main": [
+        [
+          {
+            "node": "Return Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "NOAA ENSO Download",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Return Status": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "tags": [],
+  "id": "aWb7nTZ8VjjdwP9Y"
+}

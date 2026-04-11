@@ -1,0 +1,975 @@
+{
+  "name": "Lavazza - GDELT News",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2000,
+        436
+      ],
+      "id": "manual-trigger-gdelt",
+      "name": "Manual Trigger"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 * * * *"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -2000,
+        556
+      ],
+      "id": "schedule-trigger-gdelt",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "url": "https://api.gdeltproject.org/api/v2/doc/doc",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "(coffee OR cafe OR café OR cafeicultura) sourcecountry:brazil"
+            },
+            {
+              "name": "mode",
+              "value": "artlist"
+            },
+            {
+              "name": "maxrecords",
+              "value": "50"
+            },
+            {
+              "name": "sort",
+              "value": "datedesc"
+            },
+            {
+              "name": "timespan",
+              "value": "1d"
+            },
+            {
+              "name": "format",
+              "value": "json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1600,
+        496
+      ],
+      "id": "gdelt-caffe-node",
+      "name": "GDELT caffè",
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 4,
+        "unit": "seconds"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -1400,
+        496
+      ],
+      "id": "wait-1-node",
+      "name": "Wait 4s 1",
+      "webhookId": "wait-1-webhook"
+    },
+    {
+      "parameters": {
+        "url": "https://api.gdeltproject.org/api/v2/doc/doc",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "(enchente OR seca OR queimada OR \"chuva extrema\" OR desastre) sourcecountry:BR"
+            },
+            {
+              "name": "mode",
+              "value": "artlist"
+            },
+            {
+              "name": "maxrecords",
+              "value": "50"
+            },
+            {
+              "name": "sort",
+              "value": "datedesc"
+            },
+            {
+              "name": "timespan",
+              "value": "1d"
+            },
+            {
+              "name": "format",
+              "value": "json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        0,
+        496
+      ],
+      "id": "gdelt-disastri-node",
+      "name": "GDELT disastri",
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const seen = new Map();\nconst nodeNames = ['GDELT caff\\u00e8', 'GDELT disastri'];\n\nfor (const name of nodeNames) {\n  try {\n    const items = $(name).all();\n    for (const item of items) {\n      const articles = item.json.articles || [];\n      for (const art of articles) {\n        if (art.url && !seen.has(art.url)) {\n          seen.set(art.url, art);\n        }\n      }\n    }\n  } catch(e) {}\n}\n\nreturn [{ json: { articles: Array.from(seen.values()) } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        496
+      ],
+      "id": "f73ef184-1a87-40a1-894c-4902e0115977",
+      "name": "GDELT Multi-Query"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "articles",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        460,
+        496
+      ],
+      "id": "27f8dd2a-1b09-4651-b875-83cfb1427bc5",
+      "name": "Split Out1"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        700,
+        496
+      ],
+      "id": "610695c4-135c-49ba-ae68-bc4a384476ba",
+      "name": "Loop Over Items1"
+    },
+    {
+      "parameters": {
+        "amount": 1
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        900,
+        512
+      ],
+      "id": "345fdf2d-efae-400e-9f83-7fc8093d34fe",
+      "name": "Wait1",
+      "webhookId": "6051aa69-e3ba-44e6-ad12-f044f14540b6"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=={{\n`URL: ${$json.url}\nTitle: ${$json.title}\nDomain: ${$json.domain}\nLanguage: ${$json.language}\nSource Country: ${$json.sourcecountry}\nSeen Date: ${$json.seendate}`\n}}\n",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "=You are filtering news articles for a Lavazza intelligence system that monitors risks related to coffee origins in Brazil.\n\nDecide whether an article is relevant and worth keeping for downstream scraping and analysis.\n\nAn article is relevant only if it is substantially related to at least one of the following:\n\ncoffee production trends, forecasts, or harvest data at regional or national level in Brazil\nBrazilian coffee-growing regions affected by climate, disease, or structural changes\nagribusiness, agriculture, exports, logistics, trade, tariffs, regulation, or policy that may affect Brazilian coffee at regional, national, or international scale\nenvironmental, climate, wildfire, drought, ENSO, or crop-related conditions that may affect Brazilian coffee\ngeopolitical, economic, or supply-chain developments with plausible impact on Brazilian coffee production or exports\nReject articles that are mainly about:\n\ncafes, coffee shops, restaurants, tourism, lifestyle, recipes, or coffee culture\nentertainment, sports, celebrities, general crime, or unrelated politics\ncoffee in general without a meaningful connection to Brazil\nBrazil in general without a meaningful connection to coffee, agriculture, agribusiness, climate risk, or export/logistics risk\nlocal field days, training workshops, municipal extension events, or cooperative press releases about routine operational activities\nsingle-farm or single-municipality initiatives without regional or national significance\nBe conservative. Keep only articles with impact beyond a single municipality or farm — regional, national, or international scope required.\n\nReturn only valid JSON in this exact format:\n\n\n{\n  \"url\": \"...\",\n  \"keep_article\": true,\n  \"relevance_score\": 0,\n  \"is_about_brazil\": true,\n  \"is_in_scope\": true,\n  \"topic\": \"geo\",\n  \"reason\": \"short explanation\"\n}\nRules:\n\nurl must be the exact URL value provided in the input, copied verbatim.\nkeep_article must be true only if both is_about_brazil and is_in_scope are true AND the article has impact at regional, national, or international scale.\nrelevance_score must be an integer from 0 to 100.\ntopic must be one of: \"geo\", \"crops\", \"prices\", \"environment\", \"other\".\nreason must be short and specific.\nReturn JSON only, with no extra text."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        1120,
+        512
+      ],
+      "id": "27196df6-8187-431b-9637-301357dfa161",
+      "name": "Basic LLM Chain1"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5.4-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-5.4-mini"
+        },
+        "builtInTools": {},
+        "options": {
+          "maxRetries": 2
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1120,
+        720
+      ],
+      "id": "41402a89-7898-46db-a211-61022196d5b2",
+      "name": "OpenAI Chat Model1",
+      "retryOnFail": true,
+      "credentials": {
+        "openAiApi": {
+          "id": "0Vum5STk59lUOybm",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const parsed = JSON.parse($json.text);\nreturn [{ json: parsed }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        512
+      ],
+      "id": "aa3c9e3d-9e68-4c35-bf03-8952d849ae54",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "90f83ad7-988e-4c18-99f8-7b4cf54f2e9a",
+              "leftValue": "={{ $json.keep_article }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1600,
+        512
+      ],
+      "id": "d6661d32-4bd9-45d1-a70d-a2211552fbcb",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1840,
+        496
+      ],
+      "id": "ffc6ea51-bcd8-462a-b801-5dca2ab9befd",
+      "name": "Scrape Article",
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const html = $json.data || '';\nconst meta = $('Code in JavaScript1').item.json;\n\nconst text = html\n  .replace(/<script[\\s\\S]*?<\\/script>/gi, '')\n  .replace(/<style[\\s\\S]*?<\\/style>/gi, '')\n  .replace(/<[^>]+>/g, ' ')\n  .replace(/\\s+/g, ' ')\n  .trim()\n  .slice(0, 6000);\n\nreturn [{\n  json: {\n    ...meta,\n    article_text: text\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2060,
+        496
+      ],
+      "id": "9e54e59e-ea23-4340-a602-d2eae39a4266",
+      "name": "Strip HTML"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.article_text }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You extract structured signals from news articles about Brazilian coffee. Return only valid JSON, no extra text.\n\nOutput format:\n{\n  \"signals\": [\"...\"],\n  \"entities\": [\"...\"],\n  \"sentiment\": \"positive|negative|neutral\",\n  \"summary_en\": \"...\"\n}\n\nRules:\n- signals: max 5 short strings, each a concrete risk or positive factor for Brazilian coffee\n- entities: regions, organizations, or people mentioned (max 5)\n- sentiment: overall tone toward Brazilian coffee sector\n- summary_en: 1-2 sentences in English summarizing the article\n- Return JSON only, with no extra text."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        2280,
+        480
+      ],
+      "id": "2566ba89-3135-4f99-bd34-114fd5ac36d9",
+      "name": "Extract Signals"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5.4-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-5.4-mini"
+        },
+        "builtInTools": {},
+        "options": {
+          "maxRetries": 2
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        2280,
+        672
+      ],
+      "id": "80800aca-dc28-406d-a044-7d25ff406348",
+      "name": "OpenAI Extract Model",
+      "retryOnFail": true,
+      "credentials": {
+        "openAiApi": {
+          "id": "0Vum5STk59lUOybm",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "function getCollectedPeriod(isoTs, cadenza) {\n  const d = new Date(isoTs || new Date().toISOString());\n  const pad = n => String(n).padStart(2, '0');\n  const yyyy = d.getUTCFullYear();\n  const mm = pad(d.getUTCMonth() + 1);\n  const dd = pad(d.getUTCDate());\n  const hh = pad(d.getUTCHours());\n  const doy = Math.floor((d - new Date(Date.UTC(yyyy,0,1))) / 86400000);\n  const week = pad(Math.ceil((doy + new Date(Date.UTC(yyyy,0,1)).getUTCDay() + 1) / 7));\n  switch((cadenza||'').toLowerCase()) {\n    case 'hourly':  return `${yyyy}-${mm}-${dd}T${hh}`;\n    case 'daily':   return `${yyyy}-${mm}-${dd}`;\n    case 'weekly':  return `${yyyy}-W${week}`;\n    case 'monthly': return `${yyyy}-${mm}`;\n    default:        return `${yyyy}-${mm}-${dd}`;\n  }\n}\nconst now = new Date().toISOString();\nconst _collectedPeriod = getCollectedPeriod(now, 'hourly');\n\nreturn [{\n  json: {\n    source: 'GDELT',\n    source_url: 'https://api.gdeltproject.org/api/v2/doc/doc',\n    country: 'BR',\n    macroarea: 'geo',\n    collected_at: now,\n    collected_period: _collectedPeriod,\n        url: meta.url,\n    topic: meta.topic,\n    relevance_score: meta.relevance_score,\n    reason: meta.reason,\n    signals: signals.signals,\n    entities: signals.entities,\n    sentiment: signals.sentiment,\n    summary_en: signals.summary_en,\n    embed_text: signals.summary_en + ' ' + (signals.signals || []).join('. ')\n  }\n    _chart_fields: [],\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2580,
+        480
+      ],
+      "id": "e18ca0d7-148f-4d49-b11f-5112ac0d153c",
+      "name": "Parse Signals"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "collection": "raw_geo",
+        "fields": "source,source_url,country,macroarea,collected_at,url,topic,relevance_score,reason,signals,entities,sentiment,summary_en,embed_text",
+        "options": {
+          "upsert": true
+        },
+        "filter": "{ \"source\": \"GDELT\", \"country\": \"BR\", \"url\": {{ $json.url }} }"
+      },
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        2800,
+        480
+      ],
+      "id": "64c3a7e7-3dcb-4104-a6fb-80931f946b83",
+      "name": "MongoDB raw_geo",
+      "credentials": {
+        "mongoDb": {
+          "id": "Jo4ZHZCY4HM8JRrD",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "text-embedding-3-small"
+            },
+            {
+              "name": "input",
+              "value": "={{ $('Parse Signals').item.json.embed_text }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3020,
+        464
+      ],
+      "id": "4fbe8885-98c4-4678-a655-aae58e771a16",
+      "name": "OpenAI Embeddings",
+      "credentials": {
+        "openAiApi": {
+          "id": "0Vum5STk59lUOybm",
+          "name": "OpenAi account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// Calcola collected_period da collected_at + cadenza\nfunction getCollectedPeriod(collectedAt, cadenza) {\n  const d = new Date(collectedAt || new Date().toISOString());\n  const pad = (n) => String(n).padStart(2, '0');\n  const yyyy = d.getUTCFullYear();\n  const mm = pad(d.getUTCMonth() + 1);\n  const dd = pad(d.getUTCDate());\n  const hh = pad(d.getUTCHours());\n  // ISO week number\n  const startOfYear = new Date(Date.UTC(yyyy, 0, 1));\n  const weekNo = pad(Math.ceil(((d - startOfYear) / 86400000 + startOfYear.getUTCDay() + 1) / 7));\n  switch((cadenza || '').toLowerCase()) {\n    case 'hourly':  return `${yyyy}-${mm}-${dd}T${hh}`;\n    case 'daily':   return `${yyyy}-${mm}-${dd}`;\n    case 'weekly':  return `${yyyy}-W${weekNo}`;\n    case 'monthly': return `${yyyy}-${mm}`;\n    default:        return `${yyyy}-${mm}-${dd}`;\n  }\n}\n\nconst _cadenza = 'hourly';\nconst _collectedAt = now || new Date().toISOString();\nconst _collectedPeriod = getCollectedPeriod(_collectedAt, _cadenza);\nconst meta = $('Parse Signals').item.json;\nconst vector = $json.data[0].embedding;\n\nconst url = meta.url;\nlet hash = 0;\nfor (let i = 0; i < url.length; i++) {\n  hash = ((hash << 5) - hash) + url.charCodeAt(i);\n  hash |= 0;\n}\nconst pointId = Math.abs(hash);\n\nreturn [{\n  json: {\n    points: [{\n      id: pointId,\n      vector: vector,\n      payload: {\n        source: meta.source,\n        source_url: meta.source_url,\n        country: meta.country,\n        macroarea: meta.macroarea,\n        collected_at: meta.collected_at,\n        url: meta.url,\n        topic: meta.topic,\n        relevance_score: meta.relevance_score,\n        sentiment: meta.sentiment,\n        summary_en: meta.summary_en,\n        signals: meta.signals\n      }\n    }]\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3240,
+        464
+      ],
+      "id": "73ce9a93-a2a5-4d44-a443-8f36c7a0eff7",
+      "name": "Build Qdrant Payload"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "http://qdrant:6333/collections/geo_texts/points",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3460,
+        464
+      ],
+      "id": "e5af3929-b031-4798-821f-dc9a9ce72f15",
+      "name": "Qdrant Upsert",
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const now = new Date().toISOString();\nconst meta = $('GDELT Multi-Query').item.json;\n\nreturn [{\n  json: {\n    source: 'GDELT',\n    country: 'BR',\n    macroarea: 'geo',\n    cadenza: 'hourly',\n    run_date: now,\n    status: 'done',\n    completed_at: now,\n    items_ingested: Array.isArray(meta.articles) ? meta.articles.length : null,\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        320
+      ],
+      "id": "10304559-6422-45c7-a7b7-b0891beab3c4",
+      "name": "Build Ingestion Log"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "collection": "ingestion_log",
+        "options": {
+          "upsert": true
+        },
+        "fields": "source,country,macroarea,cadenza,run_date,status,completed_at,report_period,survey_number,season,market_year,latest_year,quote_date,total_detections,latest_period,enso_phase,items_ingested,ports_monitored",
+        "filter": "{ \"source\": \"GDELT\", \"country\": \"BR\", \"run_date\": {{ $json.run_date }} }"
+      },
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        320
+      ],
+      "id": "0e518f10-1c9e-47e2-b595-c05c6210515a",
+      "name": "MongoDB ingestion_log",
+      "credentials": {
+        "mongoDb": {
+          "id": "Jo4ZHZCY4HM8JRrD",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "id": "d27bfc6d-6c95-4f72-9a57-42e9b2f3e791",
+      "name": "API Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1380,
+        496
+      ],
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst err = item.json?.error ?? item.error?.message ?? '';\nconst statusCode = item.json?.statusCode ?? item.json?.status ?? 0;\nif (err || statusCode >= 400) {\n  return [{ json: {\n    _api_skip: true,\n    source: '13_GDELT_NEWS',\n    country: 'BR',\n    status: 'skipped_api_error',\n    reason: `API unavailable: ${err || 'HTTP ' + statusCode}`,\n    run_date: new Date().toISOString(),\n    completed_at: new Date().toISOString()\n  } }];\n}\nreturn [{ json: item.json }];"
+      }
+    },
+    {
+      "id": "e3155452-178a-4841-8f01-f1808a3fa0e7",
+      "name": "API Skip?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1160,
+        496
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "76cc4151-2376-4e3f-8eac-f4bd60a72b10",
+              "leftValue": "={{ $json._api_skip }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "4a7a6760-b6e3-46ca-9b59-45b4359da727",
+      "name": "Return Status",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1320,
+        320
+      ],
+      "parameters": {
+        "mode": "manual",
+        "duplicateItem": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "480fa225-affe-422f-a403-86f79e2474e2",
+              "name": "workflow",
+              "value": "=13-gdelt-news",
+              "type": "string"
+            },
+            {
+              "id": "d32716de-c1ea-49fd-adc6-18f07a103e0a",
+              "name": "status",
+              "value": "={{ $json.status || 'done' }}",
+              "type": "string"
+            },
+            {
+              "id": "c24641a6-92c0-400b-9061-8a742d5349b5",
+              "name": "completed_at",
+              "value": "={{ new Date().toISOString() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "GDELT caffè": {
+      "main": [
+        [
+          {
+            "node": "API Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 4s 1": {
+      "main": [
+        [
+          {
+            "node": "GDELT disastri",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GDELT disastri": {
+      "main": [
+        [
+          {
+            "node": "GDELT Multi-Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GDELT Multi-Query": {
+      "main": [
+        [
+          {
+            "node": "Split Out1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out1": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items1": {
+      "main": [
+        [
+          {
+            "node": "Wait1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Ingestion Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait1": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Scrape Article",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over Items1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scrape Article": {
+      "main": [
+        [
+          {
+            "node": "Strip HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Strip HTML": {
+      "main": [
+        [
+          {
+            "node": "Extract Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Extract Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Extract Signals",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Signals": {
+      "main": [
+        [
+          {
+            "node": "Parse Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Signals": {
+      "main": [
+        [
+          {
+            "node": "MongoDB raw_geo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MongoDB raw_geo": {
+      "main": [
+        [
+          {
+            "node": "OpenAI Embeddings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Embeddings": {
+      "main": [
+        [
+          {
+            "node": "Build Qdrant Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Qdrant Payload": {
+      "main": [
+        [
+          {
+            "node": "Qdrant Upsert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Ingestion Log": {
+      "main": [
+        [
+          {
+            "node": "MongoDB ingestion_log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qdrant Upsert": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "GDELT caffè",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "GDELT caffè",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Check": {
+      "main": [
+        [
+          {
+            "node": "API Skip?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Skip?": {
+      "main": [
+        [
+          {
+            "node": "MongoDB ingestion_log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait 4s 1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MongoDB ingestion_log": {
+      "main": [
+        [
+          {
+            "node": "Return Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "GDELT caffè",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Return Status": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "tags": [],
+  "id": "udzCjAsrPBiiZ1IJ"
+}

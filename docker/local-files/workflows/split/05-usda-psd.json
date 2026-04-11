@@ -1,0 +1,474 @@
+{
+  "name": "Lavazza - USDA PSD",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2240,
+        -2980
+      ],
+      "id": "manual-trigger-usda",
+      "name": "Manual Trigger"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 7 * * 1"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -2240,
+        -2860
+      ],
+      "id": "schedule-trigger-usda",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "const currentYear = new Date().getFullYear();\nconst lookbackYears = 12;\nconst startYear = currentYear - lookbackYears + 1;\nreturn Array.from({ length: lookbackYears }, (_, index) => ({\n  json: {\n    market_year: startYear + index\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1840,
+        -2920
+      ],
+      "id": "usda-build-year-list-node",
+      "name": "USDA Build Year List"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.fas.usda.gov/api/psd/commodity/0711100/country/BR/year/{{$json.market_year}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            },
+            {
+              "name": "X-Api-Key",
+              "value": "={{ $env.USDA_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1600,
+        -2920
+      ],
+      "id": "usda-fetch-year-data-node",
+      "name": "USDA Fetch Year Data",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "function getCollectedPeriod(isoTs, cadenza) {\n  const d = new Date(isoTs || new Date().toISOString());\n  const pad = n => String(n).padStart(2, '0');\n  const yyyy = d.getUTCFullYear();\n  const mm = pad(d.getUTCMonth() + 1);\n  const dd = pad(d.getUTCDate());\n  const hh = pad(d.getUTCHours());\n  const doy = Math.floor((d - new Date(Date.UTC(yyyy,0,1))) / 86400000);\n  const week = pad(Math.ceil((doy + new Date(Date.UTC(yyyy,0,1)).getUTCDay() + 1) / 7));\n  switch((cadenza||'').toLowerCase()) {\n    case 'hourly':  return `${yyyy}-${mm}-${dd}T${hh}`;\n    case 'daily':   return `${yyyy}-${mm}-${dd}`;\n    case 'weekly':  return `${yyyy}-W${week}`;\n    case 'monthly': return `${yyyy}-${mm}`;\n    default:        return `${yyyy}-${mm}-${dd}`;\n  }\n}\nconst now = new Date().toISOString();\nconst _collectedPeriod = getCollectedPeriod(now, 'weekly');\nconst currentYear = new Date().getFullYear();\nconst lookbackYears = 6;\nconst startYear = currentYear - lookbackYears + 1;\nconst BAG_TO_MT = 60 / 1000000;\nconst ATTRIBUTE_MAP = {\n  20: 'Beginning Stocks',\n  28: 'Production',\n  29: 'Arabica Production',\n  53: 'Robusta Production',\n  56: 'Other Production',\n  57: 'Imports',\n  58: 'Bean Imports',\n  75: 'Roast & Ground Imports',\n  82: 'Soluble Imports',\n  86: 'Total Supply',\n  88: 'Exports',\n  90: 'Bean Exports',\n  107: 'Roast & Ground Exports',\n  114: 'Soluble Exports',\n  125: 'Domestic Consumption',\n  141: 'Rst,Ground Dom. Consum',\n  154: 'Soluble Dom. Cons.',\n  176: 'Ending Stocks',\n  178: 'Total Distribution'\n};\n\nfunction round(value, decimals = 4) {\n  if (value === null || value === undefined || Number.isNaN(value)) return null;\n  return Number(Number(value).toFixed(decimals));\n}\n\nfunction toNumber(value) {\n  if (value === null || value === undefined || value === '') return null;\n  const numeric = Number(value);\n  return Number.isNaN(numeric) ? null : numeric;\n}\n\nfunction safeDivide(numerator, denominator, decimals = 4) {\n  if (numerator === null || denominator === null || denominator === 0) return null;\n  return round(numerator / denominator, decimals);\n}\n\nfunction pctChange(current, previous, decimals = 4) {\n  if (current === null || previous === null || previous === 0) return null;\n  return round(((current - previous) / previous) * 100, decimals);\n}\n\nfunction ppChange(current, previous, decimals = 4) {\n  if (current === null || previous === null) return null;\n  return round(current - previous, decimals);\n}\n\nfunction marketYearLabel(year) {\n  return `${year}/${String((year + 1) % 100).padStart(2, '0')}`;\n}\n\nfunction formatMetric(value, decimals = 4) {\n  return value === null ? 'n/a' : value.toFixed(decimals);\n}\n\nfunction buildYearRecord(yearEntry) {\n  const attributesMt = yearEntry.attributes_mt;\n  const attributesRaw = yearEntry.attributes_raw;\n\n  const productionTotalMt = attributesMt['Production'] ?? null;\n  const arabicaProductionMt = attributesMt['Arabica Production'] ?? null;\n  const robustaProductionMt = attributesMt['Robusta Production'] ?? null;\n  const otherProductionMt = attributesMt['Other Production'] ?? null;\n  const exportsTotalMt = attributesMt['Exports'] ?? null;\n  const beanExportsMt = attributesMt['Bean Exports'] ?? null;\n  const roastGroundExportsMt = attributesMt['Roast & Ground Exports'] ?? null;\n  const solubleExportsMt = attributesMt['Soluble Exports'] ?? null;\n  const domesticConsumptionMt = attributesMt['Domestic Consumption'] ?? null;\n  const consRoastGroundMt = attributesMt['Rst,Ground Dom. Consum'] ?? null;\n  const consSolubleMt = attributesMt['Soluble Dom. Cons.'] ?? null;\n  const beginningStocksMt = attributesMt['Beginning Stocks'] ?? null;\n  const endingStocksMt = attributesMt['Ending Stocks'] ?? null;\n\n  const arabicaSharePct = safeDivide(arabicaProductionMt, productionTotalMt, 6);\n  const robustaSharePct = safeDivide(robustaProductionMt, productionTotalMt, 6);\n  const valueAddedExportsMt = (roastGroundExportsMt ?? 0) + (solubleExportsMt ?? 0);\n  const valueAddedExportsSharePct = exportsTotalMt !== null && exportsTotalMt !== 0\n    ? round((valueAddedExportsMt / exportsTotalMt) * 100, 4)\n    : null;\n  const apparentTotalUseMt = exportsTotalMt !== null && domesticConsumptionMt !== null\n    ? round(exportsTotalMt + domesticConsumptionMt, 4)\n    : null;\n  const exportToProductionRatio = safeDivide(exportsTotalMt, productionTotalMt, 6);\n  const stockToUseRatio = safeDivide(endingStocksMt, apparentTotalUseMt, 6);\n  const stockBalanceMt = beginningStocksMt !== null && endingStocksMt !== null\n    ? round(endingStocksMt - beginningStocksMt, 4)\n    : null;\n\n  return {\n    market_year: yearEntry.market_year,\n    market_year_label: marketYearLabel(yearEntry.market_year),\n    calendar_year: yearEntry.calendar_year,\n    release_month: yearEntry.release_month,\n    production_total_mt: productionTotalMt,\n    arabica_production_mt: arabicaProductionMt,\n    robusta_production_mt: robustaProductionMt,\n    other_production_mt: otherProductionMt,\n    exports_total_mt: exportsTotalMt,\n    bean_exports_mt: beanExportsMt,\n    roast_ground_exports_mt: roastGroundExportsMt,\n    soluble_exports_mt: solubleExportsMt,\n    domestic_consumption_mt: domesticConsumptionMt,\n    cons_roast_ground_mt: consRoastGroundMt,\n    cons_soluble_mt: consSolubleMt,\n    beginning_stocks_mt: beginningStocksMt,\n    ending_stocks_mt: endingStocksMt,\n    arabica_share_pct: arabicaSharePct !== null ? round(arabicaSharePct * 100, 4) : null,\n    robusta_share_pct: robustaSharePct !== null ? round(robustaSharePct * 100, 4) : null,\n    value_added_exports_share_pct: valueAddedExportsSharePct,\n    apparent_total_use_mt: apparentTotalUseMt,\n    export_to_production_ratio: exportToProductionRatio,\n    stock_to_use_ratio: stockToUseRatio,\n    stock_balance_mt: stockBalanceMt,\n    raw_attributes_1000_60kg_bags: attributesRaw\n  };\n}\n\n// ── Normalizza tutte le righe API ─────────────────────────────────────────────\n\nconst rawRows = [];\nfor (const item of $input.all()) {\n  if (Array.isArray(item.json)) {\n    rawRows.push(...item.json);\n  } else if (Array.isArray(item.json.data)) {\n    rawRows.push(...item.json.data);\n  } else if (Array.isArray(item.json.body)) {\n    rawRows.push(...item.json.body);\n  } else if (item.json && typeof item.json === 'object' && Object.prototype.hasOwnProperty.call(item.json, 'attributeId')) {\n    rawRows.push(item.json);\n  }\n}\n\nconst normalizedRows = rawRows\n  .map((row) => {\n    const attributeId = toNumber(row.attributeId);\n    const marketYear = toNumber(row.marketYear);\n    const calendarYear = toNumber(row.calendarYear);\n    const month = toNumber(row.month);\n    const rawValue = toNumber(row.value);\n    if (attributeId === null || marketYear === null || month === null || rawValue === null) return null;\n    return {\n      attribute_id: attributeId,\n      attribute_name: ATTRIBUTE_MAP[attributeId] || `attribute_${attributeId}`,\n      market_year: marketYear,\n      calendar_year: calendarYear,\n      month,\n      raw_value_1000_60kg_bags: round(rawValue, 4),\n      value_mt: round(rawValue * BAG_TO_MT, 4)\n    };\n  })\n  .filter((row) => row !== null)\n  .sort((a, b) => {\n    if (a.market_year !== b.market_year) return a.market_year - b.market_year;\n    if (a.month !== b.month) return a.month - b.month;\n    return a.attribute_id - b.attribute_id;\n  });\n\nif (!normalizedRows.length) {\n  throw new Error('USDA FAS PSD returned no valid rows for the requested market years');\n}\n\n// ── yearly_series: un record per anno (stima del mese più recente) ────────────\n\nconst yearMap = new Map();\nfor (const row of normalizedRows) {\n  const yearEntry = yearMap.get(row.market_year) || {\n    market_year: row.market_year,\n    calendar_year: row.calendar_year,\n    release_month: row.month,\n    attributes_raw: {},\n    attributes_mt: {}\n  };\n  yearEntry.calendar_year = row.calendar_year;\n  // sovrascrive sempre → alla fine contiene il mese più recente (array già ordinato per month asc)\n  yearEntry.release_month = row.month;\n  yearEntry.attributes_raw[row.attribute_name] = row.raw_value_1000_60kg_bags;\n  yearEntry.attributes_mt[row.attribute_name] = row.value_mt;\n  yearMap.set(row.market_year, yearEntry);\n}\n\nconst yearRecords = Array.from(yearMap.values())\n  .map(buildYearRecord)\n  .filter((row) => row.production_total_mt !== null)\n  .sort((a, b) => a.market_year - b.market_year);\n\nif (!yearRecords.length) {\n  throw new Error('USDA FAS PSD produced no market-year records with production data');\n}\n\nconst yearly_series = yearRecords.slice(-10).map((row) => ({\n  market_year: row.market_year,\n  market_year_label: row.market_year_label,\n  release_month: row.release_month,\n  production_total_mt: row.production_total_mt,\n  arabica_production_mt: row.arabica_production_mt,\n  robusta_production_mt: row.robusta_production_mt,\n  exports_total_mt: row.exports_total_mt,\n  domestic_consumption_mt: row.domestic_consumption_mt,\n  ending_stocks_mt: row.ending_stocks_mt,\n  stock_to_use_ratio: row.stock_to_use_ratio\n}));\n\n// ── monthly_series: ultimi 12 report mensili USDA ────────────────────────────\n// Chiave = data di rilascio (calendar_year + month), non marketing year\n// Per ogni rilascio prende le stime del marketing year più recente presente\n\nconst releaseDateMap = new Map();\nfor (const row of normalizedRows) {\n  const releaseKey = `${row.calendar_year}-${String(row.month).padStart(2, '0')}`;\n  if (!releaseDateMap.has(releaseKey)) {\n    releaseDateMap.set(releaseKey, {\n      calendar_year: row.calendar_year,\n      release_month: row.month,\n      release_year_month: releaseKey,\n      market_years: new Map()\n    });\n  }\n  const releaseEntry = releaseDateMap.get(releaseKey);\n  if (!releaseEntry.market_years.has(row.market_year)) {\n    releaseEntry.market_years.set(row.market_year, { attributes_mt: {} });\n  }\n  releaseEntry.market_years.get(row.market_year).attributes_mt[row.attribute_name] = row.value_mt;\n}\n\nconst monthly_series = Array.from(releaseDateMap.values())\n  .filter((entry) => entry.calendar_year >= currentYear - 1)\n  .sort((a, b) => {\n    if (a.calendar_year !== b.calendar_year) return a.calendar_year - b.calendar_year;\n    return a.release_month - b.release_month;\n  })\n  .slice(-12)\n  .map((entry) => {\n    const latestMarketYear = Math.max(...Array.from(entry.market_years.keys()));\n    const attrs = entry.market_years.get(latestMarketYear).attributes_mt;\n    const exportsTotal = attrs['Exports'] ?? null;\n    const domCons = attrs['Domestic Consumption'] ?? null;\n    const endStocks = attrs['Ending Stocks'] ?? null;\n    const totalUse = (exportsTotal !== null && domCons !== null) ? round(exportsTotal + domCons, 4) : null;\n    return {\n      release_year_month: entry.release_year_month,\n      market_year: latestMarketYear,\n      market_year_label: marketYearLabel(latestMarketYear),\n      production_total_mt: attrs['Production'] ?? null,\n      arabica_production_mt: attrs['Arabica Production'] ?? null,\n      robusta_production_mt: attrs['Robusta Production'] ?? null,\n      exports_total_mt: exportsTotal,\n      domestic_consumption_mt: domCons,\n      ending_stocks_mt: endStocks,\n      stock_to_use_ratio: safeDivide(endStocks, totalUse, 6)\n    };\n  });\n\n// ── latest / previous / derived metrics ──────────────────────────────────────\n\nconst latest = { ...yearRecords[yearRecords.length - 1] };\nconst previous = yearRecords.length > 1 ? { ...yearRecords[yearRecords.length - 2] } : null;\n\nconst productionYoYPct = previous ? pctChange(latest.production_total_mt, previous.production_total_mt) : null;\nconst exportsYoYPct = previous ? pctChange(latest.exports_total_mt, previous.exports_total_mt) : null;\nconst domesticConsumptionYoYPct = previous ? pctChange(latest.domestic_consumption_mt, previous.domestic_consumption_mt) : null;\nconst endingStocksYoYPct = previous ? pctChange(latest.ending_stocks_mt, previous.ending_stocks_mt) : null;\nconst arabicaShareChangePp = previous ? ppChange(latest.arabica_share_pct, previous.arabica_share_pct) : null;\nconst robustaShareChangePp = previous ? ppChange(latest.robusta_share_pct, previous.robusta_share_pct) : null;\n\nconst signals = [];\nif (productionYoYPct !== null && productionYoYPct >= 5) signals.push('production_up');\nif (productionYoYPct !== null && productionYoYPct <= -5) signals.push('production_down');\nif (productionYoYPct !== null && productionYoYPct <= -10) signals.push('production_down_sharp');\nif (previous && latest.arabica_production_mt !== null && previous.arabica_production_mt !== null && pctChange(latest.arabica_production_mt, previous.arabica_production_mt) <= -5) signals.push('arabica_down');\nif (robustaShareChangePp !== null && robustaShareChangePp >= 2) signals.push('robusta_share_rising');\nif (robustaShareChangePp !== null && robustaShareChangePp <= -2) signals.push('robusta_share_falling');\nif (exportsYoYPct !== null && exportsYoYPct >= 5) signals.push('exports_accelerating');\nif (latest.export_to_production_ratio !== null && latest.export_to_production_ratio >= 0.70) signals.push('exports_pressure_high');\nif (domesticConsumptionYoYPct !== null && domesticConsumptionYoYPct >= 3) signals.push('domestic_absorption_rising');\nif (endingStocksYoYPct !== null && endingStocksYoYPct <= -10) signals.push('ending_stocks_drawdown');\nif (endingStocksYoYPct !== null && endingStocksYoYPct >= 10) signals.push('ending_stocks_build');\nif (latest.stock_to_use_ratio !== null && latest.stock_to_use_ratio <= 0.15) signals.push('stock_buffer_tight');\nif (latest.stock_to_use_ratio !== null && latest.stock_to_use_ratio >= 0.25) signals.push('stock_buffer_healthy');\nif (productionYoYPct !== null && exportsYoYPct !== null && endingStocksYoYPct !== null && productionYoYPct <= 0 && exportsYoYPct > 0 && endingStocksYoYPct < 0) signals.push('balance_tightening');\n\nconst tighteningScore = [\n  productionYoYPct !== null && productionYoYPct <= -5,\n  endingStocksYoYPct !== null && endingStocksYoYPct <= -10,\n  latest.stock_to_use_ratio !== null && latest.stock_to_use_ratio <= 0.15,\n  latest.export_to_production_ratio !== null && latest.export_to_production_ratio >= 0.70\n].filter(Boolean).length;\n\nconst expansionScore = [\n  productionYoYPct !== null && productionYoYPct >= 5,\n  endingStocksYoYPct !== null && endingStocksYoYPct >= 10,\n  latest.stock_to_use_ratio !== null && latest.stock_to_use_ratio >= 0.25\n].filter(Boolean).length;\n\nlet movementLabel = 'mixed';\nif (tighteningScore >= 2) movementLabel = 'supply_tightening';\nelse if (expansionScore >= 2) movementLabel = 'supply_expanding';\n\nlet summaryEn = `Latest USDA PSD Brazil coffee snapshot for market year ${latest.market_year_label} reports ${formatMetric(latest.production_total_mt)} million metric tons of production, ${formatMetric(latest.exports_total_mt)} million metric tons of exports, and ${formatMetric(latest.ending_stocks_mt)} million metric tons of ending stocks.`;\nif (previous) {\n  summaryEn += ` Versus ${previous.market_year_label}, production changed by ${formatMetric(productionYoYPct, 4)}%, exports by ${formatMetric(exportsYoYPct, 4)}%, and ending stocks by ${formatMetric(endingStocksYoYPct, 4)}%.`;\n}\nif (movementLabel === 'supply_tightening') summaryEn += ' The balance points to tighter supply conditions.';\nif (movementLabel === 'supply_expanding') summaryEn += ' The balance points to looser supply conditions.';\nif (movementLabel === 'mixed') summaryEn += ' Signals are mixed across supply, exports, and stocks.';\n\nreturn [{\n  json: {\n    source: 'USDA_FAS_PSD',\n    source_format: 'json_api',\n    source_url_template: 'https://api.fas.usda.gov/api/psd/commodity/0711100/country/BR/year/{marketYear}',\n    source_url: 'https://api.fas.usda.gov/api/psd/commodity/0711100/country/BR/year/{marketYear}',\n    country: 'BR',\n    macroarea: 'colture',\n    commodity_code: '0711100',\n    commodity_name: 'Coffee, Green',\n    marketing_year_basis: 'July-June',\n    collected_at: now,\n    collected_period: _collectedPeriod,\n        dataset: 'PSD',\n    lookback_years_requested: lookbackYears,\n    requested_years: Array.from({ length: lookbackYears }, (_, index) => startYear + index),\n    total_records_fetched: normalizedRows.length,\n    market_year: latest.market_year,\n    market_year_label: latest.market_year_label,\n    calendar_year: latest.calendar_year,\n    release_month: latest.release_month,\n    units: {\n      raw: '1000_60kg_bags',\n      normalized: 'million_metric_tons'\n    },\n    latest: {\n      production_total_mt: latest.production_total_mt,\n      arabica_production_mt: latest.arabica_production_mt,\n      robusta_production_mt: latest.robusta_production_mt,\n      other_production_mt: latest.other_production_mt,\n      exports_total_mt: latest.exports_total_mt,\n      bean_exports_mt: latest.bean_exports_mt,\n      roast_ground_exports_mt: latest.roast_ground_exports_mt,\n      soluble_exports_mt: latest.soluble_exports_mt,\n      domestic_consumption_mt: latest.domestic_consumption_mt,\n      cons_roast_ground_mt: latest.cons_roast_ground_mt,\n      cons_soluble_mt: latest.cons_soluble_mt,\n      beginning_stocks_mt: latest.beginning_stocks_mt,\n      ending_stocks_mt: latest.ending_stocks_mt\n    },\n    previous: previous ? {\n      market_year: previous.market_year,\n      market_year_label: previous.market_year_label,\n      release_month: previous.release_month,\n      production_total_mt: previous.production_total_mt,\n      exports_total_mt: previous.exports_total_mt,\n      domestic_consumption_mt: previous.domestic_consumption_mt,\n      ending_stocks_mt: previous.ending_stocks_mt\n    } : null,\n    derived_metrics: {\n      arabica_share_pct: latest.arabica_share_pct,\n      robusta_share_pct: latest.robusta_share_pct,\n      value_added_exports_share_pct: latest.value_added_exports_share_pct,\n      apparent_total_use_mt: latest.apparent_total_use_mt,\n      export_to_production_ratio: latest.export_to_production_ratio,\n      stock_to_use_ratio: latest.stock_to_use_ratio,\n      stock_balance_mt: latest.stock_balance_mt,\n      production_yoy_pct: productionYoYPct,\n      exports_yoy_pct: exportsYoYPct,\n      domestic_consumption_yoy_pct: domesticConsumptionYoYPct,\n      ending_stocks_yoy_pct: endingStocksYoYPct,\n      arabica_share_change_pp: arabicaShareChangePp,\n      robusta_share_change_pp: robustaShareChangePp\n    },\n    movement_label: movementLabel,\n    signals: Array.from(new Set(signals)),\n    summary_en: summaryEn,\n    yearly_series: yearly_series,\n    monthly_series: monthly_series,\n    raw_latest_attributes: latest.raw_attributes_1000_60kg_bags,\n    _chart_fields: [\"yearly_series\", \"monthly_series\", \"raw_latest_attributes\"]\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1360,
+        -2920
+      ],
+      "id": "usda-parse-node",
+      "name": "USDA Parse PSD"
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "raw_crops",
+        "options": {},
+        "fields": "source,source_url,source_format,source_url_template,country,macroarea,commodity_code,commodity_name,marketing_year_basis,collected_at,dataset,lookback_years_requested,requested_years,total_records_fetched,market_year,market_year_label,calendar_year,release_month,units,latest,previous,derived_metrics,movement_label,signals,summary_en,yearly_series,monthly_series,raw_latest_attributes"
+      },
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        -640,
+        -3040
+      ],
+      "id": "usda-mongo-raw-crops-node",
+      "name": "USDA MongoDB raw_crops",
+      "credentials": {
+        "mongoDb": {
+          "id": "Jo4ZHZCY4HM8JRrD",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const now = new Date().toISOString();\nconst meta = $('USDA Parse Signals').item.json;\n\nreturn [{\n  json: {\n    source: 'USDA_FAS_PSD',\n    country: 'BR',\n    macroarea: 'colture',\n    cadenza: 'weekly',\n    run_date: now,\n    status: 'done',\n    completed_at: now,\n    market_year: meta.market_year_label || null,\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -400,
+        -3040
+      ],
+      "id": "usda-build-log-node",
+      "name": "USDA Build Ingestion Log"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "collection": "ingestion_log",
+        "options": {
+          "upsert": true
+        },
+        "fields": "source,country,macroarea,cadenza,run_date,status,completed_at,report_period,survey_number,season,market_year,latest_year,quote_date,total_detections,latest_period,enso_phase,items_ingested,ports_monitored",
+        "filter": "{ \"source\": \"USDA_FAS_PSD\", \"country\": \"BR\", \"run_date\": {{ $json.run_date }} }"
+      },
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        -160,
+        -3040
+      ],
+      "id": "usda-mongo-log-node",
+      "name": "USDA MongoDB ingestion_log",
+      "credentials": {
+        "mongoDb": {
+          "id": "Jo4ZHZCY4HM8JRrD",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ JSON.stringify({ source: $json.source, market_year_label: $json.market_year_label, latest: $json.latest, previous: $json.previous, derived_metrics: $json.derived_metrics, yearly_series: $json.yearly_series, monthly_series: $json.monthly_series, rule_based_signals: $json.signals, rule_based_movement_label: $json.movement_label, fallback_summary_en: $json.summary_en }, null, 2) }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are interpreting structured USDA PSD data for a Lavazza intelligence system monitoring Brazilian coffee supply. Use only the provided metrics and return only valid JSON.\n\nOutput format:\n{\n  \"movement_label\": \"supply_tightening|supply_expanding|mixed\",\n  \"signals\": [\"...\"],\n  \"summary_en\": \"...\"\n}\n\nInput fields:\n- latest / previous: most recent and prior marketing-year snapshots\n- derived_metrics: YoY changes and ratios\n- yearly_series: one record per marketing year (last 10 years), using the latest available USDA estimate for each year\n- monthly_series: last 12 USDA monthly releases ordered by release date — shows how estimates have been REVISED month by month; use this to detect upward/downward revision trends\n\nRules:\n- signals: max 6 short strings covering production, exports, stocks, species mix, balance pressure, or revision trend (e.g. \"production revised down 3 months in a row\")\n- keep the interpretation numerically consistent with the input\n- movement_label must describe the national supply balance\n- summary_en must be 1-2 English sentences\n- return JSON only, with no extra text."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        -1120,
+        -3040
+      ],
+      "id": "usda-ai-signals-chain-node",
+      "name": "USDA AI Signals"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5.4-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-5.4-mini"
+        },
+        "builtInTools": {},
+        "options": {
+          "maxRetries": 2
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -1120,
+        -2840
+      ],
+      "id": "usda-openai-signals-node",
+      "name": "USDA OpenAI Signals Model",
+      "retryOnFail": true,
+      "credentials": {
+        "openAiApi": {
+          "id": "0Vum5STk59lUOybm",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = ($json.text || '').trim();\nconst cleaned = raw\n  .replace(/^```json\\s*/i, '')\n  .replace(/^```\\s*/i, '')\n  .replace(/```$/i, '')\n  .trim();\nconst parsed = JSON.parse(cleaned);\nconst base = $('USDA Parse PSD').item.json;\n\nreturn [{\n  json: {\n    ...base,\n    rule_based_signals: Array.isArray(base.signals) ? base.signals : [],\n    rule_based_movement_label: base.movement_label || 'mixed',\n    fallback_summary_en: base.summary_en || '',\n    movement_label: parsed.movement_label || base.movement_label || 'mixed',\nsignals: Array.isArray(parsed.signals) ? parsed.signals : (Array.isArray(base.signals) ? base.signals : []),\n    summary_en: parsed.summary_en || base.summary_en || ''\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -880,
+        -3040
+      ],
+      "id": "usda-parse-signals-node",
+      "name": "USDA Parse Signals"
+    },
+    {
+      "id": "60dc635c-f3d3-411a-8b58-07484bea54d4",
+      "name": "API Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1380,
+        -2920
+      ],
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst err = item.json?.error ?? item.error?.message ?? '';\nconst statusCode = item.json?.statusCode ?? item.json?.status ?? 0;\nif (err || statusCode >= 400) {\n  return [{ json: {\n    _api_skip: true,\n    source: '05_USDA_PSD',\n    country: 'BR',\n    status: 'skipped_api_error',\n    reason: `API unavailable: ${err || 'HTTP ' + statusCode}`,\n    run_date: new Date().toISOString(),\n    completed_at: new Date().toISOString()\n  } }];\n}\nreturn [{ json: item.json }];"
+      }
+    },
+    {
+      "id": "d2d21a0e-b28d-4e29-85ea-508c4e4def24",
+      "name": "API Skip?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1160,
+        -2920
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "3557940b-e0ff-45f3-8ef2-9fa27124a9ce",
+              "leftValue": "={{ $json._api_skip }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "779da841-1353-4c14-9490-fee512c935a7",
+      "name": "Return Status",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        40,
+        -3040
+      ],
+      "parameters": {
+        "mode": "manual",
+        "duplicateItem": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c3e4b45f-c582-45f4-b134-9c6710ca08b3",
+              "name": "workflow",
+              "value": "=05-usda-psd",
+              "type": "string"
+            },
+            {
+              "id": "9158a5a9-3e84-4c27-9a91-dd056539b271",
+              "name": "status",
+              "value": "={{ $json.status || 'done' }}",
+              "type": "string"
+            },
+            {
+              "id": "4383ee6b-c64e-4929-a75f-13654cf86cd2",
+              "name": "completed_at",
+              "value": "={{ new Date().toISOString() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "USDA Build Year List": {
+      "main": [
+        [
+          {
+            "node": "USDA Fetch Year Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "USDA Fetch Year Data": {
+      "main": [
+        [
+          {
+            "node": "API Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "USDA Parse PSD": {
+      "main": [
+        [
+          {
+            "node": "USDA AI Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "USDA OpenAI Signals Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "USDA AI Signals",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "USDA AI Signals": {
+      "main": [
+        [
+          {
+            "node": "USDA Parse Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "USDA Parse Signals": {
+      "main": [
+        [
+          {
+            "node": "USDA MongoDB raw_crops",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "USDA MongoDB raw_crops": {
+      "main": [
+        [
+          {
+            "node": "USDA Build Ingestion Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "USDA Build Ingestion Log": {
+      "main": [
+        [
+          {
+            "node": "USDA MongoDB ingestion_log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "USDA Build Year List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "USDA Build Year List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Check": {
+      "main": [
+        [
+          {
+            "node": "API Skip?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Skip?": {
+      "main": [
+        [
+          {
+            "node": "USDA MongoDB ingestion_log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "USDA Parse PSD",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "USDA MongoDB ingestion_log": {
+      "main": [
+        [
+          {
+            "node": "Return Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "USDA Build Year List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Return Status": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "tags": [],
+  "id": "JSBq7atBa0isJaDR"
+}

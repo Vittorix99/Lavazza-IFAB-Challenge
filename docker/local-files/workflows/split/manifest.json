@@ -1,0 +1,175 @@
+{
+  "source": "Lavazza Workflow.json",
+  "workflows": 13,
+  "items": [
+    {
+      "file": "01-comex.json",
+      "workflow_name": "Lavazza - Comex",
+      "node_count": 12,
+      "connection_sources": 11,
+      "sample_nodes": [
+        "Comex Updated Check",
+        "Comex Build Query Params",
+        "Comex Fetch State Series Window",
+        "Comex Parse",
+        "Comex AI Signals"
+      ]
+    },
+    {
+      "file": "02-port-congestion.json",
+      "workflow_name": "Lavazza - Port Congestion",
+      "node_count": 8,
+      "connection_sources": 7,
+      "sample_nodes": [
+        "Port Congestion Snapshot",
+        "Port Congestion Parse",
+        "Port MongoDB raw_geo",
+        "Port OpenAI Embeddings",
+        "Port Build Qdrant Payload"
+      ]
+    },
+    {
+      "file": "03-conab.json",
+      "workflow_name": "Lavazza - CONAB",
+      "node_count": 18,
+      "connection_sources": 17,
+      "sample_nodes": [
+        "CONAB Index Download",
+        "CONAB Parse Latest Release",
+        "CONAB Download Table",
+        "CONAB Extract Table",
+        "CONAB Parse Table"
+      ]
+    },
+    {
+      "file": "04-ibge-sidra.json",
+      "workflow_name": "Lavazza - IBGE SIDRA",
+      "node_count": 8,
+      "connection_sources": 7,
+      "sample_nodes": [
+        "IBGE SIDRA Download",
+        "IBGE SIDRA Parse",
+        "IBGE AI Signals",
+        "IBGE OpenAI Signals Model",
+        "IBGE Parse Signals"
+      ]
+    },
+    {
+      "file": "05-usda-psd.json",
+      "workflow_name": "Lavazza - USDA PSD",
+      "node_count": 9,
+      "connection_sources": 8,
+      "sample_nodes": [
+        "USDA Build Year List",
+        "USDA Fetch Year Data",
+        "USDA Parse PSD",
+        "USDA MongoDB raw_crops",
+        "USDA Build Ingestion Log"
+      ]
+    },
+    {
+      "file": "06-faostat-qcl.json",
+      "workflow_name": "Lavazza - FAOSTAT QCL",
+      "node_count": 10,
+      "connection_sources": 9,
+      "sample_nodes": [
+        "FAOSTAT Auth Login",
+        "FAOSTAT Extract Token",
+        "FAOSTAT QCL Download",
+        "FAOSTAT Parse QCL",
+        "FAOSTAT MongoDB raw_crops"
+      ]
+    },
+    {
+      "file": "07-world-bank-pink-sheet.json",
+      "workflow_name": "Lavazza - World Bank Pink Sheet",
+      "node_count": 11,
+      "connection_sources": 10,
+      "sample_nodes": [
+        "World Bank Pink Sheet Download",
+        "World Bank Pink Sheet Extract",
+        "World Bank Pink Sheet Parse",
+        "World Bank MongoDB raw_prices",
+        "World Bank Build Ingestion Log"
+      ]
+    },
+    {
+      "file": "08-ecb-fx.json",
+      "workflow_name": "Lavazza - ECB FX",
+      "node_count": 8,
+      "connection_sources": 7,
+      "sample_nodes": [
+        "ECB Data Portal Download",
+        "ECB Data Portal Parse",
+        "ECB MongoDB raw_prices",
+        "ECB Build Ingestion Log",
+        "ECB MongoDB ingestion_log"
+      ]
+    },
+    {
+      "file": "09-bcb-ptax.json",
+      "workflow_name": "Lavazza - BCB PTAX",
+      "node_count": 8,
+      "connection_sources": 7,
+      "sample_nodes": [
+        "BCB PTAX Download",
+        "BCB PTAX Parse",
+        "BCB MongoDB raw_prices",
+        "BCB Build Ingestion Log",
+        "BCB MongoDB ingestion_log"
+      ]
+    },
+    {
+      "file": "10-nasa-firms.json",
+      "workflow_name": "Lavazza - NASA FIRMS",
+      "node_count": 8,
+      "connection_sources": 7,
+      "sample_nodes": [
+        "NASA FIRMS Download",
+        "NASA FIRMS Parse",
+        "NASA MongoDB raw_environment",
+        "NASA Build Ingestion Log",
+        "NASA MongoDB ingestion_log"
+      ]
+    },
+    {
+      "file": "11-noaa-enso.json",
+      "workflow_name": "Lavazza - NOAA ENSO",
+      "node_count": 8,
+      "connection_sources": 7,
+      "sample_nodes": [
+        "NOAA ENSO Download",
+        "NOAA ENSO Parse",
+        "NOAA MongoDB raw_environment",
+        "NOAA Build Ingestion Log",
+        "NOAA MongoDB ingestion_log"
+      ]
+    },
+    {
+      "file": "12-wto-news.json",
+      "workflow_name": "Lavazza - WTO News",
+      "node_count": 19,
+      "connection_sources": 18,
+      "sample_nodes": [
+        "WTO HTTP Fetch",
+        "WTO Parse RSS",
+        "WTO Loop",
+        "WTO Wait",
+        "WTO LLM Filter"
+      ]
+    },
+    {
+      "file": "13-gdelt-news.json",
+      "workflow_name": "Lavazza - GDELT News",
+      "node_count": 28,
+      "connection_sources": 27,
+      "sample_nodes": [
+        "GDELT caffè",
+        "Wait 4s 1",
+        "GDELT proteste",
+        "Wait 4s 2",
+        "GDELT porti"
+      ]
+    }
+  ]
+}

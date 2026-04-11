@@ -1,0 +1,437 @@
+{
+  "name": "Lavazza - IBGE SIDRA",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2000,
+        -3380
+      ],
+      "id": "manual-trigger-ibge",
+      "name": "Manual Trigger"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 7 * * 1"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -2000,
+        -3260
+      ],
+      "id": "schedule-trigger-ibge",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "url": "https://apisidra.ibge.gov.br/values/t/6588/n1/1/n3/11,29,31,32/v/35,36,109,216/p/last%2013/c48/39454,39455/f/a?formato=json",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1600,
+        -3320
+      ],
+      "id": "ibge-sidra-download-node",
+      "name": "IBGE SIDRA Download",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "function getCollectedPeriod(isoTs, cadenza) {\n  const d = new Date(isoTs || new Date().toISOString());\n  const pad = n => String(n).padStart(2, '0');\n  const yyyy = d.getUTCFullYear();\n  const mm = pad(d.getUTCMonth() + 1);\n  const dd = pad(d.getUTCDate());\n  const hh = pad(d.getUTCHours());\n  const doy = Math.floor((d - new Date(Date.UTC(yyyy,0,1))) / 86400000);\n  const week = pad(Math.ceil((doy + new Date(Date.UTC(yyyy,0,1)).getUTCDay() + 1) / 7));\n  switch((cadenza||'').toLowerCase()) {\n    case 'hourly':  return `${yyyy}-${mm}-${dd}T${hh}`;\n    case 'daily':   return `${yyyy}-${mm}-${dd}`;\n    case 'weekly':  return `${yyyy}-W${week}`;\n    case 'monthly': return `${yyyy}-${mm}`;\n    default:        return `${yyyy}-${mm}-${dd}`;\n  }\n}\nconst now = new Date().toISOString();\nconst _collectedPeriod = getCollectedPeriod(now, 'monthly');\nconst SOURCE_URL = 'https://apisidra.ibge.gov.br/values/t/6588/n1/1/n3/11,29,31,32/v/35,36,109,216/p/last%2012/c48/39454,39455/f/a?formato=json';\nconst PRODUCT_MAP = {\n  '39454': { key: 'arabica', name: 'Cafe arabica' },\n  '39455': { key: 'canephora', name: 'Cafe canephora' }\n};\nconst VARIABLE_MAP = {\n  '35': { key: 'production_tons', name: 'Produção' },\n  '36': { key: 'yield_kg_per_ha', name: 'Rendimento médio' },\n  '109': { key: 'planted_area_ha', name: 'Área plantada' },\n  '216': { key: 'harvested_area_ha', name: 'Área colhida' }\n};\nconst GEO_META = {\n  '1': { code: '1', name: 'Brasil', level: 'BR' },\n  '31': { code: '31', name: 'Minas Gerais', level: 'UF' },\n  '32': { code: '32', name: 'Espírito Santo', level: 'UF' },\n  '29': { code: '29', name: 'Bahia', level: 'UF' },\n  '11': { code: '11', name: 'Rondônia', level: 'UF' }\n};\nconst STATE_CODES = ['31', '32', '29', '11'];\n\nfunction round(value, decimals = 4) {\n  if (value === null || value === undefined || Number.isNaN(value)) return null;\n  return Number(Number(value).toFixed(decimals));\n}\n\nfunction parseValue(value) {\n  if (value === null || value === undefined || value === '') return null;\n  const normalized = String(value).trim();\n  if (normalized === '-' || normalized === '0') return 0;\n  if (normalized === '..' || normalized === '...' || normalized === 'X') return null;\n  if (/^[A-WY-Z]$/i.test(normalized)) return null;\n  const numeric = Number(normalized.replace(/\\./g, '').replace(',', '.'));\n  return Number.isNaN(numeric) ? null : numeric;\n}\n\nfunction safeDivide(numerator, denominator, decimals = 6) {\n  if (numerator === null || denominator === null || denominator === 0) return null;\n  return round(numerator / denominator, decimals);\n}\n\nfunction pctChange(current, previous, decimals = 4) {\n  if (current === null || previous === null || previous === 0) return null;\n  return round(((current - previous) / previous) * 100, decimals);\n}\n\nconst rawRows = [];\nfor (const item of $input.all()) {\n  if (Array.isArray(item.json)) rawRows.push(...item.json);\n  else if (Array.isArray(item.json.body)) rawRows.push(...item.json.body);\n  else if (item.json && typeof item.json === 'object' && Object.prototype.hasOwnProperty.call(item.json, 'V')) rawRows.push(item.json);\n}\n\nconst rows = rawRows\n  .filter((row) => row && row.V !== 'Valor' && PRODUCT_MAP[row.D4C] && VARIABLE_MAP[row.D2C] && GEO_META[row.D1C])\n  .map((row) => ({\n    geo_code: row.D1C,\n    geo_name: GEO_META[row.D1C].name,\n    geo_level: GEO_META[row.D1C].level,\n    variable_code: row.D2C,\n    variable_key: VARIABLE_MAP[row.D2C].key,\n    variable_name: VARIABLE_MAP[row.D2C].name,\n    period_code: row.D3C,\n    period_label: row.D3N,\n    product_code: row.D4C,\n    product_key: PRODUCT_MAP[row.D4C].key,\n    product_name: PRODUCT_MAP[row.D4C].name,\n    unit_name: row.MN,\n    value: parseValue(row.V)\n  }));\n\nif (!rows.length) {\n  throw new Error('IBGE SIDRA returned no valid rows for the requested coffee query');\n}\n\nconst periodLabels = {};\nconst index = new Map();\nfor (const row of rows) {\n  periodLabels[row.period_code] = row.period_label;\n  const key = `${row.period_code}|${row.geo_code}|${row.product_code}`;\n  const current = index.get(key) || {\n    period_code: row.period_code,\n    period_label: row.period_label,\n    geo_code: row.geo_code,\n    geo_name: row.geo_name,\n    geo_level: row.geo_level,\n    product_code: row.product_code,\n    product_key: row.product_key,\n    product_name: row.product_name\n  };\n  current[row.variable_key] = row.value;\n  index.set(key, current);\n}\n\nconst periods = Array.from(new Set(rows.map((row) => row.period_code))).sort();\nif (!periods.length) throw new Error('IBGE SIDRA returned no periods');\nconst latestPeriod = periods[periods.length - 1];\nconst comparisonPeriod = periods[0];\nconst previousPeriod = periods.length > 1 ? periods[periods.length - 2] : null;\n\nfunction getEntry(periodCode, geoCode, productCode) {\n  const record = index.get(`${periodCode}|${geoCode}|${productCode}`) || {};\n  return {\n    production_tons: record.production_tons ?? null,\n    yield_kg_per_ha: record.yield_kg_per_ha ?? null,\n    planted_area_ha: record.planted_area_ha ?? null,\n    harvested_area_ha: record.harvested_area_ha ?? null\n  };\n}\n\nfunction buildGeoSnapshot(periodCode, geoCode) {\n  const arabica = getEntry(periodCode, geoCode, '39454');\n  const canephora = getEntry(periodCode, geoCode, '39455');\n  const totalProduction = (arabica.production_tons ?? 0) + (canephora.production_tons ?? 0);\n  return {\n    geo_code: geoCode,\n    geo_name: GEO_META[geoCode].name,\n    geo_level: GEO_META[geoCode].level,\n    arabica,\n    canephora,\n    total_production_tons: totalProduction ? round(totalProduction, 0) : 0\n  };\n}\n\nconst nationalLatest = buildGeoSnapshot(latestPeriod, '1');\nconst nationalComparison = buildGeoSnapshot(comparisonPeriod, '1');\nconst nationalPreviousMonth = previousPeriod ? buildGeoSnapshot(previousPeriod, '1') : null;\nconst stateFocusLatest = STATE_CODES.map((geoCode) => buildGeoSnapshot(latestPeriod, geoCode));\nconst stateFocusComparison = Object.fromEntries(STATE_CODES.map((geoCode) => [geoCode, buildGeoSnapshot(comparisonPeriod, geoCode)]));\n\nconst latestTotal = nationalLatest.total_production_tons;\nconst comparisonTotal = nationalComparison.total_production_tons;\nconst arabicaSharePct = safeDivide(nationalLatest.arabica.production_tons, latestTotal);\nconst canephoraSharePct = safeDivide(nationalLatest.canephora.production_tons, latestTotal);\n\nconst stateProductionSharesPct = {};\nconst stateProductionChangesPct = {};\nfor (const stateCode of STATE_CODES) {\n  const latestState = stateFocusLatest.find((entry) => entry.geo_code === stateCode);\n  const previousState = stateFocusComparison[stateCode];\n  stateProductionSharesPct[stateCode] = {\n    geo_name: GEO_META[stateCode].name,\n    arabica_share_of_brazil_pct: latestState ? round((safeDivide(latestState.arabica.production_tons, nationalLatest.arabica.production_tons) || 0) * 100, 4) : null,\n    canephora_share_of_brazil_pct: latestState ? round((safeDivide(latestState.canephora.production_tons, nationalLatest.canephora.production_tons) || 0) * 100, 4) : null\n  };\n  stateProductionChangesPct[stateCode] = {\n    geo_name: GEO_META[stateCode].name,\n    arabica_production_change_pct: latestState ? pctChange(latestState.arabica.production_tons, previousState.arabica.production_tons) : null,\n    canephora_production_change_pct: latestState ? pctChange(latestState.canephora.production_tons, previousState.canephora.production_tons) : null,\n    total_production_change_pct: latestState ? pctChange(latestState.total_production_tons, previousState.total_production_tons) : null\n  };\n}\n\nconst recentSeries = periods.map((periodCode) => {\n  const brazil = buildGeoSnapshot(periodCode, '1');\n  return {\n    period_code: periodCode,\n    period_label: periodLabels[periodCode],\n    arabica_production_tons: brazil.arabica.production_tons,\n    canephora_production_tons: brazil.canephora.production_tons,\n    total_production_tons: brazil.total_production_tons,\n    arabica_yield_kg_per_ha: brazil.arabica.yield_kg_per_ha,\n    canephora_yield_kg_per_ha: brazil.canephora.yield_kg_per_ha,\n    arabica_harvested_area_ha: brazil.arabica.harvested_area_ha,\n    canephora_harvested_area_ha: brazil.canephora.harvested_area_ha\n  };\n});\n\nconst arabicaProductionChangePct = pctChange(nationalLatest.arabica.production_tons, nationalComparison.arabica.production_tons);\nconst canephoraProductionChangePct = pctChange(nationalLatest.canephora.production_tons, nationalComparison.canephora.production_tons);\nconst totalProductionChangePct = pctChange(latestTotal, comparisonTotal);\nconst arabicaYieldChangePct = pctChange(nationalLatest.arabica.yield_kg_per_ha, nationalComparison.arabica.yield_kg_per_ha);\nconst momArabicaProductionChangePct = nationalPreviousMonth ? pctChange(nationalLatest.arabica.production_tons, nationalPreviousMonth.arabica.production_tons) : null;\nconst momCanephoraProductionChangePct = nationalPreviousMonth ? pctChange(nationalLatest.canephora.production_tons, nationalPreviousMonth.canephora.production_tons) : null;\nconst momTotalProductionChangePct = nationalPreviousMonth ? pctChange(nationalLatest.total_production_tons, nationalPreviousMonth.total_production_tons) : null;\nconst momArabicaYieldChangePct = nationalPreviousMonth ? pctChange(nationalLatest.arabica.yield_kg_per_ha, nationalPreviousMonth.arabica.yield_kg_per_ha) : null;\nconst momCanephoraYieldChangePct = nationalPreviousMonth ? pctChange(nationalLatest.canephora.yield_kg_per_ha, nationalPreviousMonth.canephora.yield_kg_per_ha) : null;\nconst canephoraYieldChangePct = pctChange(nationalLatest.canephora.yield_kg_per_ha, nationalComparison.canephora.yield_kg_per_ha);\n\nconst ruleBasedFlags = [];\nif (arabicaProductionChangePct !== null && arabicaProductionChangePct >= 5) ruleBasedFlags.push('arabica_output_rising');\nif (arabicaProductionChangePct !== null && arabicaProductionChangePct <= -5) ruleBasedFlags.push('arabica_output_falling');\nif (canephoraProductionChangePct !== null && canephoraProductionChangePct >= 5) ruleBasedFlags.push('canephora_output_rising');\nif (canephoraProductionChangePct !== null && canephoraProductionChangePct <= -5) ruleBasedFlags.push('canephora_output_falling');\nif ((stateProductionSharesPct['31']?.arabica_share_of_brazil_pct ?? 0) >= 70) ruleBasedFlags.push('minas_gerais_dominates_arabica');\nif ((stateProductionSharesPct['32']?.canephora_share_of_brazil_pct ?? 0) >= 50) ruleBasedFlags.push('espirito_santo_dominates_canephora');\nif ((stateProductionChangesPct['29']?.canephora_production_change_pct ?? 0) >= 5) ruleBasedFlags.push('bahia_canephora_rising');\nif ((stateProductionChangesPct['11']?.canephora_production_change_pct ?? 0) >= 5) ruleBasedFlags.push('rondonia_canephora_rising');\nif (arabicaYieldChangePct !== null && arabicaYieldChangePct <= -5) ruleBasedFlags.push('arabica_yield_softening');\nif (canephoraYieldChangePct !== null && canephoraYieldChangePct <= -5) ruleBasedFlags.push('canephora_yield_softening');\n\nlet movementLabel = 'mixed';\nif (totalProductionChangePct !== null && totalProductionChangePct >= 5) movementLabel = 'supply_expanding';\nelse if (totalProductionChangePct !== null && totalProductionChangePct <= -5) movementLabel = 'supply_tightening';\nelse if ((stateProductionSharesPct['31']?.arabica_share_of_brazil_pct ?? 0) >= 70 || (stateProductionSharesPct['32']?.canephora_share_of_brazil_pct ?? 0) >= 50) movementLabel = 'regional_shift';\n\n\nconst fallbackSummaryEn = `Latest IBGE LSPA coffee estimate for ${periodLabels[latestPeriod]} shows Brazil at ${round(latestTotal, 0)} tons, with arabica at ${round(nationalLatest.arabica.production_tons, 0)} tons and canephora at ${round(nationalLatest.canephora.production_tons, 0)} tons. Compared with ${periodLabels[comparisonPeriod]}, total production changed by ${totalProductionChangePct === null ? 'n/a' : `${totalProductionChangePct.toFixed(4)}%`}, while Minas Gerais remained dominant in arabica and Espírito Santo remained dominant in canephora.`;\n\nreturn [{\n  json: {\n    source: 'IBGE_SIDRA_LSPA',\n    source_format: 'json_api',\n    source_url: SOURCE_URL,\n    source_descriptor_url: 'https://apisidra.ibge.gov.br/DescritoresTabela/t/6588',\n    country: 'BR',\n    macroarea: 'colture',\n    dataset: 'LSPA',\n    table_id: 6588,\n    classification_id: 48,\n    product_codes: { arabica: '39454', canephora: '39455' },\n    focus_states: STATE_CODES.map((code) => GEO_META[code]),\n    collected_at: now,\n    collected_period: _collectedPeriod,\n        latest_period_code: latestPeriod,\n    latest_period_label: periodLabels[latestPeriod],\n    comparison_period_code: comparisonPeriod,\n    comparison_period_label: periodLabels[comparisonPeriod],\n    national_latest: nationalLatest,\n    national_comparison: nationalComparison,\n    derived_metrics: {\n      national_total_production_tons: latestTotal,\n      national_arabica_share_pct: arabicaSharePct !== null ? round(arabicaSharePct * 100, 4) : null,\n      national_canephora_share_pct: canephoraSharePct !== null ? round(canephoraSharePct * 100, 4) : null,\n      national_changes_vs_first_period_pct: {\n        total_production_change_pct: totalProductionChangePct,\n        arabica_production_change_pct: arabicaProductionChangePct,\n        canephora_production_change_pct: canephoraProductionChangePct,\n        arabica_yield_change_pct: arabicaYieldChangePct,\n        canephora_yield_change_pct: canephoraYieldChangePct\n      },\n      mom_changes: {\n        comparison_period_label: previousPeriod ? periodLabels[previousPeriod] : null,\n        total_production_change_pct: momTotalProductionChangePct,\n        arabica_production_change_pct: momArabicaProductionChangePct,\n        canephora_production_change_pct: momCanephoraProductionChangePct,\n        arabica_yield_change_pct: momArabicaYieldChangePct,\n        canephora_yield_change_pct: momCanephoraYieldChangePct\n      },\n      state_production_shares_pct: stateProductionSharesPct,\n      state_production_changes_pct: stateProductionChangesPct\n    },\n    state_focus_latest: stateFocusLatest,\n    recent_series: recentSeries,\n    movement_label: movementLabel,\nsignals: Array.from(new Set(ruleBasedFlags)),\n    summary_en: fallbackSummaryEn,\n    _chart_fields: [\"recent_series\", \"state_focus_latest\"]\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1360,
+        -3320
+      ],
+      "id": "ibge-sidra-parse-node",
+      "name": "IBGE SIDRA Parse"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ JSON.stringify({ latest_period_label: $json.latest_period_label, national_latest: $json.national_latest, national_comparison: $json.national_comparison, derived_metrics: $json.derived_metrics, state_focus_latest: $json.state_focus_latest, recent_series: $json.recent_series, rule_based_signals: $json.signals, rule_based_movement_label: $json.movement_label, fallback_summary_en: $json.summary_en }, null, 2) }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are interpreting structured IBGE LSPA data for Brazilian coffee. Focus on Brazil and these four states only: Minas Gerais, Espírito Santo, Bahia, Rondônia. Use only the provided metrics and return only valid JSON.\n\nOutput format:\n{\n  \"movement_label\": \"supply_tightening|supply_expanding|regional_shift|mixed\",\n  \"signals\": [\"...\"],\n  \"summary_en\": \"...\"\n}\n\nRules:\n- signals: max 6 short strings about production, yield, species mix, or geographic concentration\n- mention arabica vs canephora only when numerically relevant\n- use movement_label = regional_shift when the national picture is mixed but concentration across Minas Gerais, Espírito Santo, Bahia, or Rondônia matters\n- summary_en must be 1-2 English sentences\n- return JSON only, with no extra text."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        -1120,
+        -3440
+      ],
+      "id": "ibge-ai-signals-chain-node",
+      "name": "IBGE AI Signals"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {
+          "maxRetries": 2
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -1120,
+        -3240
+      ],
+      "id": "ibge-openai-signals-node",
+      "name": "IBGE OpenAI Signals Model",
+      "retryOnFail": true,
+      "credentials": {
+        "openAiApi": {
+          "id": "0Vum5STk59lUOybm",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = ($json.text || '').trim();\nconst cleaned = raw\n  .replace(/^```json\\s*/i, '')\n  .replace(/^```\\s*/i, '')\n  .replace(/```$/i, '')\n  .trim();\nconst parsed = JSON.parse(cleaned);\nconst base = $('IBGE SIDRA Parse').item.json;\n\nreturn [{\n  json: {\n    ...base,\n    rule_based_signals: Array.isArray(base.signals) ? base.signals : [],\n    rule_based_movement_label: base.movement_label || 'mixed',\nfallback_summary_en: base.summary_en || '',\n    movement_label: parsed.movement_label || base.movement_label || 'mixed',\n    signals: Array.isArray(parsed.signals) ? parsed.signals : (Array.isArray(base.signals) ? base.signals : []),\n    summary_en: parsed.summary_en || base.summary_en || ''\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -880,
+        -3440
+      ],
+      "id": "ibge-parse-signals-node",
+      "name": "IBGE Parse Signals"
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "raw_crops",
+        "options": {},
+        "fields": "source,source_format,source_url,source_descriptor_url,country,macroarea,dataset,table_id,classification_id,product_codes,focus_states,collected_at,latest_period_code,latest_period_label,comparison_period_code,comparison_period_label,national_latest,national_comparison,derived_metrics,state_focus_latest,recent_series,movement_label,signals,summary_en"
+      },
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        -640,
+        -3440
+      ],
+      "id": "ibge-mongo-raw-crops-node",
+      "name": "IBGE MongoDB raw_crops",
+      "credentials": {
+        "mongoDb": {
+          "id": "Jo4ZHZCY4HM8JRrD",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const now = new Date().toISOString();\nconst meta = $('IBGE Parse Signals').item.json;\n\nreturn [{\n  json: {\n    source: 'IBGE_SIDRA_LSPA',\n    country: 'BR',\n    macroarea: 'colture',\n    cadenza: 'weekly',\n    run_date: now,\n    status: 'done',\n    completed_at: now,\n    report_period: meta.latest_period_code || null,\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -400,
+        -3440
+      ],
+      "id": "ibge-build-log-node",
+      "name": "IBGE Build Ingestion Log"
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "collection": "ingestion_log",
+        "options": {
+          "upsert": true
+        },
+        "fields": "source,country,macroarea,cadenza,run_date,status,completed_at,report_period,survey_number,season,market_year,latest_year,quote_date,total_detections,latest_period,enso_phase,items_ingested,ports_monitored",
+        "filter": "{ \"source\": \"IBGE_SIDRA_LSPA\", \"country\": \"BR\", \"run_date\": {{ $json.run_date }} }"
+      },
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        -160,
+        -3440
+      ],
+      "id": "ibge-mongo-log-node",
+      "name": "IBGE MongoDB ingestion_log",
+      "credentials": {
+        "mongoDb": {
+          "id": "Jo4ZHZCY4HM8JRrD",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "id": "1047c6e9-b833-46bf-8d69-961b64102b1e",
+      "name": "API Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1380,
+        -3320
+      ],
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst err = item.json?.error ?? item.error?.message ?? '';\nconst statusCode = item.json?.statusCode ?? item.json?.status ?? 0;\nif (err || statusCode >= 400) {\n  return [{ json: {\n    _api_skip: true,\n    source: '04_IBGE_SIDRA',\n    country: 'BR',\n    status: 'skipped_api_error',\n    reason: `API unavailable: ${err || 'HTTP ' + statusCode}`,\n    run_date: new Date().toISOString(),\n    completed_at: new Date().toISOString()\n  } }];\n}\nreturn [{ json: item.json }];"
+      }
+    },
+    {
+      "id": "5fa4032f-215f-49e8-b44f-6cd3fdf70829",
+      "name": "API Skip?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1160,
+        -3320
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "2b2161b0-97ce-4e88-81ce-693d75da0f2f",
+              "leftValue": "={{ $json._api_skip }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "6f9394bf-0df4-40a8-8095-4d29b0d88e2f",
+      "name": "Return Status",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        40,
+        -3440
+      ],
+      "parameters": {
+        "mode": "manual",
+        "duplicateItem": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "6f6927e5-d034-4f25-ac92-134509d7facb",
+              "name": "workflow",
+              "value": "=04-ibge-sidra",
+              "type": "string"
+            },
+            {
+              "id": "49f505ae-0212-4376-abdb-b48ca9c57005",
+              "name": "status",
+              "value": "={{ $json.status || 'done' }}",
+              "type": "string"
+            },
+            {
+              "id": "1a847fa8-6ebc-4e1f-a06e-796d543a8b75",
+              "name": "completed_at",
+              "value": "={{ new Date().toISOString() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "IBGE SIDRA Download": {
+      "main": [
+        [
+          {
+            "node": "API Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IBGE SIDRA Parse": {
+      "main": [
+        [
+          {
+            "node": "IBGE AI Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IBGE OpenAI Signals Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "IBGE AI Signals",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IBGE AI Signals": {
+      "main": [
+        [
+          {
+            "node": "IBGE Parse Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IBGE Parse Signals": {
+      "main": [
+        [
+          {
+            "node": "IBGE MongoDB raw_crops",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IBGE MongoDB raw_crops": {
+      "main": [
+        [
+          {
+            "node": "IBGE Build Ingestion Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IBGE Build Ingestion Log": {
+      "main": [
+        [
+          {
+            "node": "IBGE MongoDB ingestion_log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "IBGE SIDRA Download",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "IBGE SIDRA Download",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Check": {
+      "main": [
+        [
+          {
+            "node": "API Skip?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Skip?": {
+      "main": [
+        [
+          {
+            "node": "IBGE MongoDB ingestion_log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IBGE SIDRA Parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IBGE MongoDB ingestion_log": {
+      "main": [
+        [
+          {
+            "node": "Return Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "IBGE SIDRA Download",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Return Status": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "tags": [],
+  "id": "2I8KER0mGOBdDLUi"
+}
