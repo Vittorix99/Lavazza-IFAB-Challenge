@@ -12,6 +12,158 @@
 
 ---
 
+## 🚀 COME AVVIARE LA DASHBOARD
+
+### File richiesti
+
+Per eseguire la dashboard sono necessari i seguenti file nella stessa cartella di progetto:
+
+| File | Ruolo |
+|------|-------|
+| `app_standalone.py` | Applicazione Streamlit principale — contiene tutta la logica di fetch, caching e rendering dei grafici. È l'unico file da passare a `streamlit run`. |
+| `dashboard_core.py` | Modulo di supporto con costanti condivise, utilità e funzioni ausiliarie richiamate da `app_standalone.py`. Deve essere presente nella stessa directory. |
+| `fetch_conab.py` | Script indipendente per il download e il parsing del report Excel CONAB. Va eseguito separatamente, prima di avviare la dashboard. |
+
+---
+
+### Prerequisiti
+
+1. **Python ≥ 3.10** installato sul sistema.
+2. **Dipendenze Python** installate tramite il file `requirements.txt` incluso nel progetto:
+
+```bash
+pip install -r requirements.txt
+```
+
+Il file `requirements.txt` include le librerie principali:
+
+```
+pymongo
+python-dotenv
+streamlit
+pandas
+numpy
+plotly
+requests
+matplotlib
+scipy
+beautifulsoup4
+```
+
+Alcune librerie aggiuntive **non incluse** nel `requirements.txt` potrebbero essere necessarie a seconda dell'ambiente; installarle separatamente se mancanti:
+
+```bash
+pip install geopandas websockets faostat openpyxl
+```
+
+3. **Variabili d'ambiente** per i dati live (vedi sezione dedicata sotto):
+
+```bash
+# Creare un file .env nella cartella del progetto, oppure esportare nel terminale
+export USDA_API_KEY="la-tua-chiave-usda"
+export FAOSTAT_USERNAME="la-tua-email-fao"
+export FAOSTAT_PASSWORD="la-tua-password-fao"
+```
+
+> **Nota:** Senza queste variabili la dashboard funziona comunque in modalità **Dati Simulati**, che non richiede alcuna autenticazione.
+
+---
+
+### Come ottenere le credenziali e le chiavi API
+
+Ogni fonte dati richiede una registrazione separata. Di seguito i passaggi per ciascuna:
+
+#### 🔑 USDA API Key
+1. Andare su [https://apps.fas.usda.gov/psdonline/app/index.html#/app/registration](https://apps.fas.usda.gov/psdonline/app/index.html#/app/registration)
+2. Registrarsi gratuitamente con nome, cognome ed e-mail istituzionale.
+3. Una volta approvata la richiesta (tipicamente entro poche ore), si riceve la chiave via e-mail.
+4. Impostarla come variabile d'ambiente: `export USDA_API_KEY="xxxxx"`
+
+#### 🔑 FAOSTAT Username & Password
+1. Andare su [https://www.fao.org/registration/](https://www.fao.org/registration/) e creare un account FAO gratuito.
+2. Le credenziali FAO (e-mail e password) sono le stesse da usare nella dashboard.
+3. Impostarle come variabili: `export FAOSTAT_USERNAME="email@esempio.com"` e `export FAOSTAT_PASSWORD="password"`
+> **Nota:** Se FAOSTAT non richiede autenticazione nel momento dell'uso, le variabili possono essere lasciate vuote — la libreria tenta comunque l'accesso pubblico.
+
+#### 🔑 NASA FIRMS Map Key
+1. Andare su [https://firms.modaps.eosdis.nasa.gov/api/area/](https://firms.modaps.eosdis.nasa.gov/api/area/)
+2. Cliccare su **"Get MAP_KEY"** e registrarsi con un account Earth Data NASA (gratuito).
+3. La chiave viene mostrata subito dopo la registrazione.
+4. La chiave è attualmente hardcoded nella costante `FIRMS_MAP_KEY` in `app_standalone.py` — sostituire il valore con la propria chiave.
+
+#### 🔑 ER-API (Exchange Rates)
+- **Nessuna registrazione richiesta.** L'endpoint `open.er-api.com` è pubblico e gratuito per uso base (1.500 chiamate/mese).
+- Non è necessaria alcuna chiave API nella configurazione attuale della dashboard.
+
+#### 🔑 AISStream.io API Key
+1. Andare su [https://aisstream.io/](https://aisstream.io/) e registrarsi gratuitamente.
+2. Dal pannello utente, copiare la propria API Key.
+3. La chiave è attualmente hardcoded nella costante `AIS_API_KEY` in `app_standalone.py` — sostituire il valore con la propria chiave.
+> **Nota:** Il piano gratuito di AISStream è sufficiente per la demo. Per copertura AIS completa sui porti brasiliani è necessario un piano premium.
+
+---
+
+### Passo 1 — Aggiornare i dati CONAB
+
+Prima di avviare la dashboard, eseguire una volta lo script di scraping CONAB per scaricare il report più recente:
+
+```bash
+python3 fetch_conab.py
+```
+
+Lo script scarica l'ultimo Excel dal sito `gov.br/conab`, lo analizza e salva il risultato in:
+
+```
+data_sources/conab/conab_data.csv
+```
+
+> **Quando ripetere questo passo:** Il CONAB pubblica nuovi Levantamentos de Café circa 5-6 volte all'anno. Si consiglia di schedulare questo script (es. via cron job mensile) oppure di eseguirlo manualmente prima di ogni presentazione importante.
+
+---
+
+### Passo 2 — Avviare la dashboard Streamlit
+
+Dalla cartella del progetto, eseguire:
+
+```bash
+streamlit run app_standalone.py
+```
+
+Streamlit avvierà automaticamente il browser predefinito all'indirizzo:
+
+```
+http://localhost:8501
+```
+
+> **Opzioni utili:**
+> ```bash
+> # Specificare una porta diversa
+> streamlit run app_standalone.py --server.port 8080
+>
+> # Avviare senza aprire il browser automaticamente
+> streamlit run app_standalone.py --server.headless true
+> ```
+
+---
+
+### Riepilogo rapido (copia-incolla)
+
+```bash
+# 1. Installa le dipendenze (solo la prima volta)
+pip install -r requirements.txt
+pip install geopandas websockets faostat openpyxl   # se non già presenti
+
+# 2. Aggiorna i dati CONAB
+python3 fetch_conab.py
+
+# 3. Avvia la dashboard
+streamlit run app_standalone.py
+```
+
+Una volta aperta la dashboard, selezionare **"Dati API Reali"** dalla sidebar sinistra per usare le fonti live, oppure **"Dati Simulati"** per una demo offline senza chiavi API.
+
+---
+
 ## PARTE 1 — PANORAMICA DELLA DASHBOARD
 
 ### Cos'è questa dashboard?
