@@ -1,0 +1,10 @@
+pymongo
+python-dotenv
+streamlit
+pandas
+numpy
+plotly
+requests
+matplotlib
+scipy
+beautifulsoup4
