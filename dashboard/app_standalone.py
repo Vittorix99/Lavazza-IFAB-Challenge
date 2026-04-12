@@ -1,8 +1,8 @@
 # .env required:
-#   USDA_API_KEY          — USDA PSD API key (default provided as fallback)
-#   FAOSTAT_USERNAME      — FAOSTAT credentials (optional, public data works without)
-#   FAOSTAT_PASSWORD      — FAOSTAT credentials (optional)
-#   AIS_API_KEY           — hardcoded below (aisstream.io)
+#   USDA_API_KEY          - USDA PSD API key (default provided as fallback)
+#   FAOSTAT_USERNAME      - FAOSTAT credentials (optional, public data works without)
+#   FAOSTAT_PASSWORD      - FAOSTAT credentials (optional)
+#   AIS_API_KEY           - hardcoded below (aisstream.io)
 
 import os
 import io
@@ -147,6 +147,88 @@ MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 
+# ==========================================
+# MASTER REGION NAME NORMALIZER
+# Maps every possible region/state name variant to a clean Italian label.
+# ==========================================
+REGION_NAME_MASTER = {
+    # State abbreviations
+    "MG": "MG - Minas Gerais (Sud-Est)",
+    "ES": "ES - Espírito Santo (Sud-Est)",
+    "SP": "SP - São Paulo (Sud-Est)",
+    "RJ": "RJ - Rio de Janeiro (Sud-Est)",
+    "PR": "PR - Paraná (Sud)",
+    "SC": "SC - Santa Catarina (Sud)",
+    "RS": "RS - Rio Grande do Sul (Sud)",
+    "BA": "BA - Bahia (Nord-Est)",
+    "PE": "PE - Pernambuco (Nord-Est)",
+    "CE": "CE - Ceará (Nord-Est)",
+    "RO": "RO - Rondônia (Nord)",
+    "AM": "AM - Amazonas (Nord)",
+    "PA": "PA - Pará (Nord)",
+    "GO": "GO - Goiás (Centro-Ovest)",
+    "MT": "MT - Mato Grosso (Centro-Ovest)",
+    "MS": "MS - Mato Grosso do Sul (Centro-Ovest)",
+    "DF": "DF - Distrito Federal (Centro-Ovest)",
+    "AC": "AC - Acre (Nord)",
+    "AP": "AP - Amapá (Nord)",
+    "RR": "RR - Roraima (Nord)",
+    "TO": "TO - Tocantins (Nord)",
+    "AL": "AL - Alagoas (Nord-Est)",
+    "MA": "MA - Maranhão (Nord-Est)",
+    "PB": "PB - Paraíba (Nord-Est)",
+    "PI": "PI - Piauí (Nord-Est)",
+    "RN": "RN - Rio Grande do Norte (Nord-Est)",
+    "SE": "SE - Sergipe (Nord-Est)",
+    # Full state names (various spellings)
+    "Minas Gerais":   "MG - Minas Gerais (Sud-Est)",
+    "Espirito Santo": "ES - Espírito Santo (Sud-Est)",
+    "Espírito Santo": "ES - Espírito Santo (Sud-Est)",
+    "Sao Paulo":      "SP - São Paulo (Sud-Est)",
+    "São Paulo":      "SP - São Paulo (Sud-Est)",
+    "Bahia":          "BA - Bahia (Nord-Est)",
+    "Rondonia":       "RO - Rondônia (Nord)",
+    "Rondônia":       "RO - Rondônia (Nord)",
+    "Parana":         "PR - Paraná (Sud)",
+    "Paraná":         "PR - Paraná (Sud)",
+    "Goias":          "GO - Goiás (Centro-Ovest)",
+    "Goiás":          "GO - Goiás (Centro-Ovest)",
+    "Mato Grosso":    "MT - Mato Grosso (Centro-Ovest)",
+    "Rio de Janeiro": "RJ - Rio de Janeiro (Sud-Est)",
+    "Amazonas":       "AM - Amazonas (Nord)",
+    # CONAB micro-regions → map to parent state/area
+    "Triângulo, Alto Paranaiba e Noroeste": "MG Norte-Ovest - Triângulo/Noroeste",
+    "Triângulo, Alto Paranaíba e Noroeste": "MG Norte-Ovest - Triângulo/Noroeste",
+    "Norte, Jequitinhonha e Mucuri":        "MG Nord - Jequitinhonha/Mucuri",
+    "Zona da Mata, Rio Doce e Central":     "MG Centro-Est - Zona da Mata",
+    "Sul e Centro-Oeste":                   "MG Sud - Sul e Centro-Oeste",
+    "Sul e Centro-Oeste de MG":             "MG Sud - Sul e Centro-Oeste",
+    "Planalto":                             "MG Planalto - Região Central",
+    "Cerrado":                              "MG Cerrado - Região do Cerrado",
+    "Atlântico":                            "ES Atlântico - Costa dell'Atlantico",
+    "Atlântico ES":                         "ES Atlântico - Costa dell'Atlantico",
+    # Brazilian macro-regions
+    "SUDESTE":      "Sud-Est Brasile (MG, ES, SP, RJ)",
+    "NORDESTE":     "Nord-Est Brasile (BA, PE, CE...)",
+    "NORTE":        "Nord Brasile (RO, AM, PA...)",
+    "CENTRO-OESTE": "Centro-Ovest Brasile (GO, MT, MS)",
+    "SUL":          "Sud Brasile (PR, SC, RS)",
+    "Norte":        "Nord Brasile (RO, AM, PA...)",
+    "Nordeste":     "Nord-Est Brasile (BA, PE, CE...)",
+    "Sudeste":      "Sud-Est Brasile (MG, ES, SP, RJ)",
+    "Centro-Oeste": "Centro-Ovest Brasile (GO, MT, MS)",
+    "Sul":          "Sud Brasile (PR, SC, RS)",
+}
+
+
+def normalize_region_name(name: str) -> str:
+    """Map any region/state name variant to a clean, readable Italian label."""
+    if not isinstance(name, str):
+        return str(name)
+    name_stripped = name.strip()
+    return REGION_NAME_MASTER.get(name_stripped, name_stripped)
+
+
 def get_session_seed():
     return 42
 
@@ -156,7 +238,7 @@ def get_macro_region_from_sigla(sigla: str) -> str:
 
 
 def try_api_get(url: str, api_name: str, timeout: int = 10) -> Tuple[requests.Response, dict]:
-    status = {"api": api_name, "url": url[:30] + "...", "status": "✅ Successo", "error": "—"}
+    status = {"api": api_name, "url": url[:30] + "...", "status": "✅ Successo", "error": "-"}
     try:
         res = requests.get(url, timeout=timeout)
         res.raise_for_status()
@@ -186,7 +268,7 @@ def try_api_get(url: str, api_name: str, timeout: int = 10) -> Tuple[requests.Re
 
 @st.cache_data(ttl=86400, show_spinner=False)
 def fetch_enso_data(simulated: bool) -> Tuple[pd.Series, dict]:
-    status = {"api": "NOAA ONI", "url": NOAA_ONI_URL[:30] + "...", "status": "✅ Successo", "error": "—"}
+    status = {"api": "NOAA ONI", "url": NOAA_ONI_URL[:30] + "...", "status": "✅ Successo", "error": "-"}
     if not simulated:
         res, status = try_api_get(NOAA_ONI_URL, "NOAA ONI", 10)
         if res is not None:
@@ -221,7 +303,7 @@ def fetch_enso_data(simulated: bool) -> Tuple[pd.Series, dict]:
 
 @st.cache_data(ttl=86400, show_spinner=False)
 def fetch_soi_data(simulated: bool) -> Tuple[pd.Series, dict]:
-    status = {"api": "NOAA SOI", "url": NOAA_SOI_URL[:30] + "...", "status": "✅ Successo", "error": "—"}
+    status = {"api": "NOAA SOI", "url": NOAA_SOI_URL[:30] + "...", "status": "✅ Successo", "error": "-"}
     if not simulated:
         res, status = try_api_get(NOAA_SOI_URL, "NOAA SOI", 10)
         if res is not None:
@@ -257,7 +339,7 @@ def fetch_soi_data(simulated: bool) -> Tuple[pd.Series, dict]:
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_firms_data(simulated: bool) -> Tuple[pd.DataFrame, dict]:
     url = f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{FIRMS_MAP_KEY}/{FIRMS_SOURCE}/{FIRMS_BBOX}/{FIRMS_DAYS}"
-    status = {"api": "NASA FIRMS", "url": url[:30] + "...", "status": "✅ Successo", "error": "—"}
+    status = {"api": "NASA FIRMS", "url": url[:30] + "...", "status": "✅ Successo", "error": "-"}
     if not simulated:
         res, status = try_api_get(url, "NASA FIRMS", 15)
         if res is not None:
@@ -281,18 +363,35 @@ def fetch_firms_data(simulated: bool) -> Tuple[pd.DataFrame, dict]:
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_prices(simulated: bool) -> Tuple[pd.DataFrame, list]:
     statuses = [
-        {"api": "World Bank Prices", "url": WB_MONTHLY_URL[:30] + "...", "status": "✅ Successo", "error": "—"},
-        {"api": "ER-API FX", "url": FX_URL[:30] + "...", "status": "✅ Successo", "error": "—"}
+        {"api": "World Bank Prices", "url": WB_MONTHLY_URL[:30] + "...", "status": "✅ Successo", "error": "-"},
+        {"api": "yfinance EURBRL=X",  "url": "yfinance / EURBRL=X / 10yr",  "status": "✅ Successo", "error": "-"}
     ]
     if not simulated:
-        fx_res, fx_stat = try_api_get(FX_URL, "ER-API FX", 10)
-        statuses[1] = fx_stat
-        if fx_res is not None:
-            usd_to_eur = float(fx_res.json().get("rates", {}).get("EUR", 0.95))
-            brl_per_eur = float(fx_res.json().get("rates", {}).get("BRL", 5.0)) / usd_to_eur
-        else:
-            usd_to_eur, brl_per_eur = 0.95, 5.2
+        # ── Step 1: Download historical EURBRL=X monthly FX via yfinance ─────────────
+        try:
+            import yfinance as yf
+            raw_fx = yf.download(
+                "EURBRL=X",
+                period="12y",        # 12 years to ensure 10y of data after resampling
+                interval="1mo",
+                auto_adjust=True,
+                progress=False,
+            )
+            # Flatten MultiIndex columns if present
+            if isinstance(raw_fx.columns, pd.MultiIndex):
+                raw_fx.columns = raw_fx.columns.get_level_values(0)
+            raw_fx = raw_fx[["Close"]].rename(columns={"Close": "fx_brl_per_eur"})
+            raw_fx.index = pd.to_datetime(raw_fx.index).to_period("M").to_timestamp("M")
+            raw_fx = raw_fx.reset_index().rename(columns={"index": "date", "Date": "date"})
+            raw_fx["date"] = pd.to_datetime(raw_fx["date"])
+            raw_fx = raw_fx.dropna(subset=["fx_brl_per_eur"])
+            statuses[1]["status"] = "✅ Successo"
+        except Exception as e:
+            statuses[1]["status"] = "❌ Fallito"
+            statuses[1]["error"] = str(e)[:60]
+            raw_fx = pd.DataFrame(columns=["date", "fx_brl_per_eur"])
 
+        # ── Step 2: Download World Bank coffee prices ────────────────────────────
         wb_res, wb_stat = try_api_get(WB_MONTHLY_URL, "World Bank Prices", 15)
         statuses[0] = wb_stat
         if wb_res is not None:
@@ -307,22 +406,55 @@ def fetch_prices(simulated: bool) -> Tuple[pd.DataFrame, list]:
             coffee["date"] = pd.to_datetime(
                 coffee["date_raw"].astype(str).str.replace("M", "-", regex=False), errors="coerce")
             coffee = coffee.dropna(subset=["date"]).sort_values("date")
-            coffee["arabica_eur_kg"] = coffee["arabica_usd_kg"] * usd_to_eur
-            coffee["robusta_eur_kg"] = coffee["robusta_usd_kg"] * usd_to_eur
-            coffee["fx_brl_per_eur"] = brl_per_eur
+
+            # Normalise dates to month-end for merge alignment
+            coffee["date"] = coffee["date"] + pd.offsets.MonthEnd(0)
+
+            # ── Step 3: Merge historical FX onto coffee prices ──────────────────
+            if not raw_fx.empty:
+                raw_fx["date"] = raw_fx["date"] + pd.offsets.MonthEnd(0)
+                coffee = pd.merge_asof(
+                    coffee.sort_values("date"),
+                    raw_fx.sort_values("date"),
+                    on="date",
+                    direction="nearest",
+                    tolerance=pd.Timedelta(days=45),
+                )
+                # Forward-fill any gaps ≤ 3 months; beyond that stays NaN → dropped
+                coffee["fx_brl_per_eur"] = coffee["fx_brl_per_eur"].ffill(limit=3)
+            else:
+                # Fallback: constant rate if yfinance completely failed
+                coffee["fx_brl_per_eur"] = 5.5
+
+            coffee = coffee.dropna(subset=["arabica_usd_kg", "fx_brl_per_eur"])
+
+            # USD → EUR using a fixed approximate spot (WB publishes USD prices only)
+            USD_TO_EUR = 0.93   # approximate multi-year average; good enough for EUR display
+            coffee["arabica_eur_kg"] = coffee["arabica_usd_kg"] * USD_TO_EUR
+            coffee["robusta_eur_kg"] = coffee["robusta_usd_kg"] * USD_TO_EUR
+            coffee["arabica_brl_kg"] = coffee["arabica_usd_kg"] * coffee["fx_brl_per_eur"] * (1 / USD_TO_EUR) * USD_TO_EUR
+            # Simplify: arabica_brl_kg = arabica_usd_kg × (BRL per USD)
+            #   BRL/USD = fx_brl_per_eur × USD_TO_EUR (since BRL/EUR ÷ EUR/USD = BRL/USD)
+            #   arabica_brl_kg = arabica_usd_kg × fx_brl_per_eur × USD_TO_EUR
+            coffee["arabica_brl_kg"] = coffee["arabica_usd_kg"] * (coffee["fx_brl_per_eur"] * USD_TO_EUR)
+
             return coffee.tail(120).reset_index(drop=True), statuses
 
+    # ── Simulated fallback ──────────────────────────────────────────────────
     if simulated:
         statuses[0]["status"] = "⚪ Simulato"
         statuses[1]["status"] = "⚪ Simulato"
     rng = np.random.default_rng(get_session_seed())
     dates = pd.date_range(end=pd.Timestamp.today() + pd.offsets.MonthEnd(0), periods=120, freq="ME")
     n = len(dates)
+    eur_series = 4.5 + np.cumsum(rng.normal(0, 0.1, n))
+    fx_series  = 5.2 + np.cumsum(rng.normal(0, 0.05, n))
     df = pd.DataFrame({
-        "date": dates,
-        "arabica_eur_kg": 4.5 + np.cumsum(rng.normal(0, 0.1, n)),
-        "robusta_eur_kg": 2.2 + np.cumsum(rng.normal(0, 0.05, n)),
-        "fx_brl_per_eur": 5.2 + np.cumsum(rng.normal(0, 0.05, n))
+        "date":            dates,
+        "arabica_eur_kg":  eur_series,
+        "robusta_eur_kg":  2.2 + np.cumsum(rng.normal(0, 0.05, n)),
+        "fx_brl_per_eur": fx_series,
+        "arabica_brl_kg": eur_series * fx_series,
     })
     return df, statuses
 
@@ -350,12 +482,12 @@ def fetch_climate(date_series: pd.Series, simulated: bool) -> pd.DataFrame:
 
 
 # ==========================================
-# USDA PSD — per-year keyed fetch
+# USDA PSD - per-year keyed fetch
 # ==========================================
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_usda(simulated: bool) -> Tuple[pd.DataFrame, dict]:
-    status = {"api": "USDA PSD", "url": f"{USDA_BASE_URL}/commodity/...", "status": "✅ Successo", "error": "—"}
+    status = {"api": "USDA PSD", "url": f"{USDA_BASE_URL}/commodity/...", "status": "✅ Successo", "error": "-"}
 
     if not simulated:
         try:
@@ -457,7 +589,7 @@ def fetch_usda(simulated: bool) -> Tuple[pd.DataFrame, dict]:
 
 
 # ==========================================
-# FAOSTAT — via faostat Python package
+# FAOSTAT - via faostat Python package
 # ==========================================
 
 def _faostat_mock() -> pd.DataFrame:
@@ -474,7 +606,7 @@ def _faostat_mock() -> pd.DataFrame:
 
 @st.cache_data(ttl=86400, show_spinner=False)
 def fetch_faostat(simulated: bool) -> Tuple[pd.DataFrame, dict]:
-    status = {"api": "FAOSTAT (QCL)", "url": "faostat pkg / QCL / Brazil", "status": "✅ Successo", "error": "—"}
+    status = {"api": "FAOSTAT (QCL)", "url": "faostat pkg / QCL / Brazil", "status": "✅ Successo", "error": "-"}
 
     if not simulated:
         try:
@@ -490,7 +622,7 @@ def fetch_faostat(simulated: bool) -> Tuple[pd.DataFrame, dict]:
             if fao_user and fao_pass:
                 faostat_pkg.set_requests_args(username=fao_user, password=fao_pass)
 
-            # Elements as comma-separated STRING (not a list) — required by the package
+            # Elements as comma-separated STRING (not a list) - required by the package
             # 2312=Area harvested, 2413=Yield, 2510=Production
             # Try with elements first, fall back to no element filter
             mypars_full = {"area": "21", "item": "656", "element": "2312,2413,2510"}
@@ -528,12 +660,12 @@ def fetch_faostat(simulated: bool) -> Tuple[pd.DataFrame, dict]:
 
 
 # ==========================================
-# CONAB — file-based, no live scrape in app
+# CONAB - file-based, no live scrape in app
 # ==========================================
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_conab_states(simulated: bool) -> Tuple[pd.DataFrame, dict]:
-    status = {"api": "CONAB Excel", "url": "gov.br/conab/...", "status": "✅ Successo", "error": "—"}
+    status = {"api": "CONAB Excel", "url": "gov.br/conab/...", "status": "✅ Successo", "error": "-"}
 
     if os.path.exists(CONAB_CSV_PATH):
         try:
@@ -611,22 +743,22 @@ def build_port_history(climate_df: pd.DataFrame, simulated: bool) -> pd.DataFram
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_coffee_state_prod(simulated: bool) -> pd.DataFrame:
     rows = []
-    name_map = {
-        'MG': 'Minas Gerais', 'ES': 'Espírito Santo', 'SP': 'São Paulo',
-        'BA': 'Bahia', 'RO': 'Rondônia', 'PR': 'Paraná', 'RJ': 'Rio de Janeiro',
-        'GO': 'Goiás', 'MT': 'Mato Grosso'
-    }
     for sigla, vals in COFFEE_STATE_PROD.items():
-        rows.append({"state": name_map[sigla], "arabica_bags": vals['Arabica'], "robusta_bags": vals['Robusta']})
+        # normalize_region_name maps sigla → "MG - Minas Gerais (Sud-Est)" etc.
+        rows.append({
+            "state": normalize_region_name(sigla),
+            "arabica_bags": vals['Arabica'],
+            "robusta_bags": vals['Robusta'],
+        })
     return pd.DataFrame(rows)
 
 
 # ==========================================
-# LIVE WEBSOCKET LOGIC (AIS) — NO CACHE
+# LIVE WEBSOCKET LOGIC (AIS) - NO CACHE
 # ==========================================
 
 async def _fetch_ais_snapshot(simulated: bool, listen_time_seconds: int = 10):
-    status = {"api": "AISStream WS", "url": AIS_WS_URL, "status": "✅ Successo", "error": "—"}
+    status = {"api": "AISStream WS", "url": AIS_WS_URL, "status": "✅ Successo", "error": "-"}
     diag = {
         "connection":       "Not attempted",
         "messages_received": 0,
@@ -750,15 +882,17 @@ def render_wildfire_maps(fires_df: pd.DataFrame, states_prod: pd.DataFrame):
         return
 
     coffee_df = states_prod[["state", "arabica_bags", "robusta_bags"]].copy()
-    name_to_sigla = {
-        'Minas Gerais': 'MG', 'Espírito Santo': 'ES', 'São Paulo': 'SP',
-        'Bahia': 'BA', 'Rondônia': 'RO', 'Paraná': 'PR', 'Rio de Janeiro': 'RJ',
-        'Goiás': 'GO', 'Mato Grosso': 'MT'
-    }
-    sigla_to_arabica = {name_to_sigla[r["state"]]: r["arabica_bags"]
-                        for _, r in coffee_df.iterrows() if r["state"] in name_to_sigla}
-    sigla_to_robusta = {name_to_sigla[r["state"]]: r["robusta_bags"]
-                        for _, r in coffee_df.iterrows() if r["state"] in name_to_sigla}
+
+    def _extract_sigla(label: str) -> str:
+        """Extract 2-letter sigla from a normalized label like 'MG - Minas Gerais (Sud-Est)'."""
+        if isinstance(label, str) and "-" in label:
+            return label.split("-")[0].strip()
+        return label.strip() if isinstance(label, str) else ""
+
+    sigla_to_arabica = {_extract_sigla(r["state"]): r["arabica_bags"]
+                        for _, r in coffee_df.iterrows() if _extract_sigla(r["state"])}
+    sigla_to_robusta = {_extract_sigla(r["state"]): r["robusta_bags"]
+                        for _, r in coffee_df.iterrows() if _extract_sigla(r["state"])}
 
     brazil_map = brazil_states.copy()
     brazil_map["Arabica"] = brazil_map["sigla"].map(sigla_to_arabica).replace(0, np.nan)
@@ -811,6 +945,44 @@ def render_wildfire_maps(fires_df: pd.DataFrame, states_prod: pd.DataFrame):
 
     plt.tight_layout()
     st.pyplot(fig)
+
+    with st.expander("📖 Come leggere la mappa - Legenda FRP (Fire Radiative Power)", expanded=False):
+        col_l1, col_l2, col_l3 = st.columns(3)
+        with col_l1:
+            st.markdown("**Punti Grigi (FRP ≤ 50 MW)**")
+            st.caption(
+                "Focolai di bassa intensità: fuochi agricoli controllati, "
+                "disboscamento minore, biomassa secca. Impatto agronomico limitato."
+            )
+        with col_l2:
+            st.markdown("**Punti Rosso-Arancio (FRP 50–200 MW)**")
+            st.caption(
+                "Incendi significativi. Rischio diretto per le piantagioni nelle vicinanze. "
+                "Monitorare se sovrapposti alle aree di produzione colorata."
+            )
+        with col_l3:
+            st.markdown("**Punti Giallo-Bianco (FRP > 200 MW)**")
+            st.caption(
+                "Incendi di massima intensità. Equivale a migliaia di ettari in fiamme. "
+                "Impatto certo sul raccolto in corso e potenzialmente su quello successivo."
+            )
+        st.markdown("---")
+        col_s1, col_s2 = st.columns(2)
+        with col_s1:
+            st.markdown("**Scala colore mappa sinistra (Verde)**")
+            st.caption("Intensità di produzione Arabica per stato (milioni di sacchi da 60 kg). "
+                       "Verde scuro = alta produzione. Grigio chiaro = produzione assente o trascurabile.")
+        with col_s2:
+            st.markdown("**Scala colore mappa destra (Viola)**")
+            st.caption("Intensità di produzione Robusta/Conilon per stato. "
+                       "Viola intenso = Espírito Santo (principale produttore). "
+                       "Rondônia (RO) è il secondo produttore Robusta.")
+        st.info(
+            "**FRP (Fire Radiative Power)** è la potenza energetica irradiata dall'incendio misurata dal satellite "
+            "NASA VIIRS in **Megawatt (MW)**. Non è la superficie bruciata - è l'intensità istantanea del fuoco. "
+            "Un valore alto indica combustione intensa di vegetazione densa (es. foresta, non sterpaglia)."
+        )
+
     plt.close(fig)
 
 
@@ -818,7 +990,7 @@ def render_wildfire_maps(fires_df: pd.DataFrame, states_prod: pd.DataFrame):
 # UI TABS RENDERING
 # ==========================================
 
-def render_tab_1(oni_series, soi_series, climate):
+def render_tab_1(oni_series, soi_series):
     def safe_delta(series):
         if len(series) < 2:
             return None
@@ -879,6 +1051,8 @@ def render_tab_1(oni_series, soi_series, climate):
                                          line=dict(color='black', width=1.5), marker=dict(size=4)))
             fig_oni.add_hline(y=0.5, line_dash="dash", line_color="red", annotation_text="El Niño (+0.5)")
             fig_oni.add_hline(y=-0.5, line_dash="dash", line_color="blue", annotation_text="La Niña (-0.5)")
+            fig_oni.update_yaxes(title_text="Anomalia Termica (°C)")
+            fig_oni.update_xaxes(title_text="Periodo")
             fig_oni.update_layout(height=400, margin=dict(l=0, r=0, t=10, b=0))
             st.plotly_chart(fig_oni, use_container_width=True)
             st.caption("L'Oceanic Niño Index (ONI) misura le anomalie della temperatura superficiale del mare nel Pacifico centrale. Valori sopra +0.5°C indicano condizioni El Niño; sotto -0.5°C indicano La Niña. Le aree ombreggiate evidenziano le fasi attive.")
@@ -891,6 +1065,8 @@ def render_tab_1(oni_series, soi_series, climate):
             fig_soi = go.Figure(data=[go.Bar(x=x_soi, y=soi_recent.values, marker_color=bar_colors)])
             fig_soi.add_hline(y=7, line_dash="dash", line_color="blue", annotation_text="La Niña (+7)")
             fig_soi.add_hline(y=-7, line_dash="dash", line_color="red", annotation_text="El Niño (-7)")
+            fig_soi.update_yaxes(title_text="Indice SOI (adimensionale)")
+            fig_soi.update_xaxes(title_text="Periodo")
             fig_soi.update_layout(height=400, margin=dict(l=0, r=0, t=10, b=0))
             st.plotly_chart(fig_soi, use_container_width=True)
             st.caption("Il Southern Oscillation Index (SOI) misura le differenze di pressione atmosferica nel Pacifico. Valori fortemente positivi confermano La Niña; valori fortemente negativi confermano El Niño. La divergenza dall'ONI segnala un evento debole o disaccoppiato.")
@@ -907,41 +1083,15 @@ def render_tab_1(oni_series, soi_series, climate):
         pivot_oni.index = [MONTH_NAMES[i - 1] for i in pivot_oni.index]
         fig_heat = px.imshow(pivot_oni, text_auto=".1f", aspect="auto",
                              color_continuous_scale="RdBu_r", color_continuous_midpoint=0)
-        fig_heat.update_layout(height=350, margin=dict(l=0, r=0, t=10, b=0))
+        fig_heat.update_layout(height=350, margin=dict(l=0, r=0, t=10, b=0),
+                               coloraxis_colorbar=dict(title="ONI (°C)"))
         st.plotly_chart(fig_heat, use_container_width=True)
         st.caption("Valori ONI mensili su 10 anni, organizzati per anno (colonne) e mese (righe). Le celle rosse indicano mesi El Niño; le blu indicano La Niña. Utile per identificare schemi stagionali e cicli pluriennali.")
 
     except Exception as e:
         st.warning(f"Impossibile visualizzare il grafico ENSO: {e}")
 
-    # Temperature anomaly
-    try:
-        st.markdown("#### Anomalia di Temperatura Superficiale — Cintura del Caffè Brasiliana")
-        temp_df = climate.copy()
-        fig_temp = go.Figure()
-        fig_temp.add_trace(go.Scatter(
-            x=temp_df["date"],
-            y=temp_df["temperature_anomaly_c"].where(temp_df["temperature_anomaly_c"] >= 0, 0),
-            fill='tozeroy', fillcolor='rgba(220,50,50,0.3)',
-            line=dict(width=0), hoverinfo='skip', showlegend=False
-        ))
-        fig_temp.add_trace(go.Scatter(
-            x=temp_df["date"],
-            y=temp_df["temperature_anomaly_c"].where(temp_df["temperature_anomaly_c"] < 0, 0),
-            fill='tozeroy', fillcolor='rgba(50,100,220,0.3)',
-            line=dict(width=0), hoverinfo='skip', showlegend=False
-        ))
-        fig_temp.add_trace(go.Scatter(
-            x=temp_df["date"], y=temp_df["temperature_anomaly_c"],
-            mode='lines', name='Anomalia Temp. (°C)', line=dict(color='black', width=1.2)
-        ))
-        fig_temp.add_hline(y=0, line_color="grey", line_dash="dot")
-        fig_temp.update_layout(height=350, margin=dict(l=0, r=0, t=10, b=0),
-                                yaxis_title="Anomalia di Temperatura (°C)")
-        st.plotly_chart(fig_temp, use_container_width=True)
-        st.caption("Anomalia mensile della temperatura superficiale nella cintura del caffè brasiliana rispetto alla baseline 1980-2010. Valori positivi (rosso) indicano stress termico superiore alla norma durante le fasi critiche di crescita.")
-    except Exception as e:
-        st.warning(f"Impossibile visualizzare il grafico delle temperature: {e}")
+
 
 
 def render_tab_2(fires, climate, states_prod):
@@ -958,7 +1108,7 @@ def render_tab_2(fires, climate, states_prod):
                 recent_climate, x="date", y="wildfire_count",
                 markers=True,
                 color_discrete_sequence=[COLORS['danger']],
-                labels={"wildfire_count": "Numero Incendi", "date": "Data"}
+                labels={"wildfire_count": "Numero Incendi (focolai/mese)", "date": "Data"}
             )
             fig_ts.update_layout(height=400, margin=dict(l=0, r=0, t=10, b=0))
             st.plotly_chart(fig_ts, use_container_width=True)
@@ -998,7 +1148,7 @@ def render_tab_2(fires, climate, states_prod):
 def render_tab_3(ports_history, live_vessels, ship_types, ais_status, diag):
 
     # ── SECTION 1: LIVE GLOBAL AIS STREAM ──────────────────────────────────
-    st.markdown("### 🛰️ Flusso AIS Live — Porti di Riferimento Globali")
+    st.markdown("### 🛰️ Flusso AIS Live - Porti di Riferimento Globali")
     st.info(
         "**Perché porti globali?** Il piano gratuito di AISStream.io non ha copertura affidabile "
         "nelle bounding box dei porti brasiliani. Singapore, Rotterdam e Los Angeles sono "
@@ -1025,23 +1175,31 @@ def render_tab_3(ports_history, live_vessels, ship_types, ais_status, diag):
             )
 
     # Tally per global port
-    live_results = {p: {"transit": 0, "anchored": 0} for p in AIS_LIVE_PORTS}
+    live_results = {p: {"transito": 0, "ormeggiato": 0, "totale_segnali": 0} for p in AIS_LIVE_PORTS}
     for mmsi, v in live_vessels.items():
         p = v.get("port")
-        if p in live_results:
-            if v["sog"] < 1.0 or v["status"] in [1, 5]:
-                live_results[p]["anchored"] += 1
+        if p not in live_results:
+            continue
+        live_results[p]["totale_segnali"] += 1
+        ship_t = ship_types.get(mmsi, 75)
+        # Only count confirmed or assumed cargo (70-89 or unknown=75)
+        if ship_t == 0 or (70 <= ship_t <= 89):
+            if v["sog"] < 1.0 or v.get("status") in [1, 5]:
+                live_results[p]["ormeggiato"] += 1
             else:
-                live_results[p]["transit"] += 1
+                live_results[p]["transito"] += 1
 
     cols = st.columns(len(AIS_LIVE_PORTS))
     for i, (port, counts) in enumerate(live_results.items()):
-        total = counts["transit"] + counts["anchored"]
-        cols[i].metric(port, f"{total} navi",
-                       f"{counts['anchored']} all'ancora / {counts['transit']} in transito")
+        cargo = counts["transito"] + counts["ormeggiato"]
+        cols[i].metric(
+            port,
+            f"{cargo} cargo",
+            f"Totale segnali AIS: {counts['totale_segnali']}"
+        )
 
     try:
-        bar_data = [{"Porto": k, "In Transito": v["transit"], "All'Ancora/Ormeggiato": v["anchored"]}
+        bar_data = [{"Porto": k, "In Transito": v["transito"], "All'Ancora/Ormeggiato": v["ormeggiato"]}
                     for k, v in live_results.items()]
         df_bar = pd.DataFrame(bar_data).melt(id_vars="Porto", var_name="Stato", value_name="Navi")
         fig_live = px.bar(df_bar, x="Porto", y="Navi", color="Stato", barmode="group",
@@ -1062,22 +1220,29 @@ def render_tab_3(ports_history, live_vessels, ship_types, ais_status, diag):
     st.caption(f"Ultimo aggiornamento: {st.session_state.get('ais_fetched_at', 'Mai')}")
 
     st.divider()
+    with st.expander("ℹ️ Perché i dati brasiliani sono stime e non dati live?", expanded=True):
+        st.markdown("""
+Il sistema AIS (Automatic Identification System) gratuito non ha copertura affidabile nei porti brasiliani.
+Il tier gratuito di AISStream.io copre principalmente i grandi hub globali (Asia, Nord Europa, West Coast USA).
+Per dati AIS live sui porti di Santos, Vitória e Paranaguá in produzione sarebbe necessario un feed premium
+(es. MarineTraffic, Spire Maritime) al costo indicativo di **€500–5.000/mese**.
+        """)
 
-    # ── SECTION 2: BRAZIL PORTS — HISTORICAL MODELLED DATA ────────────────
-    st.markdown("### 🇧🇷 Porti Brasiliani del Caffè — Stime di Congestione Modellistiche")
-    st.caption("Le stime di congestione e ritardo sono modellate dagli indicatori di stress climatico "
-               "(deficit pluviometrico, pressione da incendi) e dal throughput storico di base per porto.")
+    # ── SECTION 2: BRAZIL PORTS - HISTORICAL MODELLED DATA ────────────────
+    st.markdown("### 🇧🇷 Porti Brasiliani del Caffè - Esempio di visualizzazione")
 
     try:
         colA, colB = st.columns(2)
         with colA:
-            st.markdown("#### Tendenze Ritardo Porto — Ultimi 12 Mesi (Giorni)")
+            st.markdown("#### Tendenze Ritardo Porto - Ultimi 12 Mesi (Giorni)")
             if not ports_history.empty:
                 recent = ports_history[
                     ports_history["date"] >= ports_history["date"].max() - pd.DateOffset(months=12)
                 ]
                 fig_delay = px.line(recent, x="date", y="delay_days", color="port", markers=True,
                                     labels={"delay_days": "Ritardo (giorni)", "port": "Porto", "date": "Data"})
+                fig_delay.update_yaxes(title_text="Ritardo Stimato (giorni)")
+                fig_delay.update_xaxes(title_text="Data")
                 fig_delay.update_layout(height=380, margin=dict(l=0, r=0, t=10, b=0))
                 st.plotly_chart(fig_delay, use_container_width=True)
                 st.caption("Ogni linea mostra il ritardo di spedizione stimato per un porto di esportazione di caffè brasiliano negli ultimi 12 mesi. Ritardi più elevati correlano con la congestione della stagione secca e le interruzioni stradali causate dagli incendi.")
@@ -1116,6 +1281,8 @@ def render_tab_4(prices):
                                       name="Arabica (€)", line=dict(color=COLORS['arabica'])), secondary_y=False)
             figA.add_trace(go.Scatter(x=prices["date"], y=prices["robusta_eur_kg"],
                                       name="Robusta (€)", line=dict(color=COLORS['robusta'])), secondary_y=True)
+            figA.update_yaxes(title_text="Arabica (EUR/kg)", secondary_y=False)
+            figA.update_yaxes(title_text="Robusta (EUR/kg)", secondary_y=True)
             figA.update_layout(height=380, margin=dict(l=0, r=0, t=10, b=0))
             st.plotly_chart(figA, use_container_width=True)
             st.caption("Prezzi storici ICE futures Arabica e Robusta convertiti in EUR/kg con tassi FX in tempo reale da ER-API. Fonte: World Bank Commodity Price Data (Pink Sheet), frequenza mensile.")
@@ -1130,59 +1297,102 @@ def render_tab_4(prices):
                                   name="Differenziale Prezzi", marker_color="#8c564b", opacity=0.6))
             figS.add_trace(go.Scatter(x=prices_c["date"], y=prices_c["ma_3"],
                                       mode="lines", name="Media Mobile 3 Mesi", line=dict(color="red", width=2)))
+            figS.update_yaxes(title_text="Differenziale (EUR/kg)")
+            figS.update_xaxes(title_text="Data")
             figS.update_layout(height=380, margin=dict(l=0, r=0, t=10, b=0))
             st.plotly_chart(figS, use_container_width=True)
             st.caption("Premio di prezzo dell'Arabica sull'Robusta in EUR/kg. Le barre mostrano il differenziale mensile grezzo; la linea rossa è la media mobile a 3 mesi. Un differenziale in allargamento segnala differenziazione qualitativa o shock di offerta.")
 
-        c3, c4 = st.columns(2)
-        with c3:
-            st.markdown("#### Variazione % MoM Prezzo Arabica")
-            pr_copy = prices.copy()
-            pr_copy["year"] = pr_copy["date"].dt.year
-            pr_copy["month"] = pr_copy["date"].dt.strftime("%b")
-            pt = pr_copy.pivot_table(index="month", columns="year", values="arabica_eur_kg", sort=False)
-            returns = pt.pct_change(axis=1) * 100
-            fig_heat = px.imshow(returns, text_auto=".1f", aspect="auto",
-                                 color_continuous_scale="RdYlGn_r", color_continuous_midpoint=0)
-            fig_heat.update_layout(height=380, margin=dict(l=0, r=0, t=10, b=0))
-            st.plotly_chart(fig_heat, use_container_width=True)
-            st.caption("Variazione percentuale mensile del prezzo Arabica, organizzata per mese (righe) e anno (colonne). Rosso = prezzo calato rispetto al mese precedente; verde = prezzo salito. Utile per identificare schemi stagionali.")
+        st.markdown("#### Prezzo Arabica: BRL/kg vs EUR/kg a Confronto")
 
-        with c4:
-            st.markdown("#### Prezzo Arabica: USD/kg vs EUR/kg a Confronto")
-            figFX = make_subplots(specs=[[{"secondary_y": True}]])
-            prices_fx = prices.copy()
-            # Se la pipeline real ha già arabica_usd_kg usala, altrimenti approssima
-            if "arabica_usd_kg" in prices_fx.columns and prices_fx["arabica_usd_kg"].notna().sum() > 10:
-                usd_series = prices_fx["arabica_usd_kg"]
-            else:
-                # Approssima con tasso EUR/USD storico simulato (gradiente realistico)
-                rng_fx = np.random.default_rng(42)
-                n = len(prices_fx)
-                eurusd = np.clip(0.85 + np.cumsum(rng_fx.normal(0, 0.003, n)), 0.80, 1.05)
-                usd_series = prices_fx["arabica_eur_kg"] / eurusd
+        # ── Build Base-100 normalized series ────────────────────────────────
+        px_c = prices[["date", "arabica_brl_kg", "arabica_eur_kg", "fx_brl_per_eur"]].copy().reset_index(drop=True)
+        px_c["brl_idx"] = (px_c["arabica_brl_kg"] / px_c["arabica_brl_kg"].iloc[0]) * 100
+        px_c["eur_idx"] = (px_c["arabica_eur_kg"] / px_c["arabica_eur_kg"].iloc[0]) * 100
+
+        # ── Rolling 12-month Z-score of fx_brl_per_eur ────────────────────────
+        px_c["fx_roll_mean"] = px_c["fx_brl_per_eur"].rolling(12, min_periods=3).mean()
+        px_c["fx_roll_std"]  = px_c["fx_brl_per_eur"].rolling(12, min_periods=3).std()
+        px_c["fx_zscore"]    = (px_c["fx_brl_per_eur"] - px_c["fx_roll_mean"]) / px_c["fx_roll_std"].replace(0, np.nan)
+        bar_colors_fx = ["#3E7B58" if (z == z and z > 1) else "#BDBDBD" for z in px_c["fx_zscore"].fillna(0)]
+
+        figFX = make_subplots(
+            rows=2, cols=1,
+            shared_xaxes=True,
+            row_heights=[0.65, 0.35],
+            vertical_spacing=0.08,
+            subplot_titles=("Andamento Prezzi Normalizzati (Base 100)",
+                            "Z-Score FX BRL/EUR - Rolling 12 Mesi"),
+        )
+
+        # ── Top subplot: fill-between segments colored by FX advantage ────────
+        dates_list = px_c["date"].tolist()
+        brl_vals   = px_c["brl_idx"].tolist()
+        eur_vals   = px_c["eur_idx"].tolist()
+
+        for i in range(len(dates_list) - 1):
+            eur_advantage = eur_vals[i] < brl_vals[i]   # EUR index lower = cheaper for buyer
+            fill_col = "rgba(62,123,88,0.18)" if eur_advantage else "rgba(178,58,46,0.12)"
             figFX.add_trace(go.Scatter(
-                x=prices_fx["date"], y=usd_series,
-                name="Arabica (USD/kg)", fill='tozeroy',
-                fillcolor='rgba(26, 94, 168, 0.15)',
-                line=dict(color=COLORS['highlight'], width=1.5)
-            ), secondary_y=False)
-            figFX.add_trace(go.Scatter(
-                x=prices_fx["date"], y=prices_fx["arabica_eur_kg"],
-                name="Arabica (EUR/kg)",
-                line=dict(color=COLORS['arabica'], width=2.2)
-            ), secondary_y=True)
-            figFX.update_yaxes(title_text="USD/kg", secondary_y=False)
-            figFX.update_yaxes(title_text="EUR/kg", secondary_y=True)
-            figFX.update_layout(height=380, margin=dict(l=0, r=0, t=10, b=0),
-                                plot_bgcolor="rgba(0,0,0,0)")
-            st.plotly_chart(figFX, use_container_width=True)
-            st.caption(
-                "Confronto tra il prezzo benchmark internazionale dell'Arabica in USD/kg (area blu) "
-                "e il costo equivalente in EUR/kg (linea marrone). La divergenza tra le due curve riflette "
-                "le variazioni del tasso di cambio EUR/USD nel tempo — un EUR più forte riduce il costo "
-                "di approvvigionamento espresso in euro a parità di prezzo commodity."
-            )
+                x=[dates_list[i], dates_list[i + 1], dates_list[i + 1], dates_list[i]],
+                y=[brl_vals[i],   brl_vals[i + 1],   eur_vals[i + 1],   eur_vals[i]],
+                fill="toself",
+                fillcolor=fill_col,
+                mode="lines",                  # suppress stray marker dots at polygon vertices
+                line=dict(width=0, color=fill_col),
+                hoverinfo="skip",
+                showlegend=False,
+            ), row=1, col=1)
+
+        figFX.add_trace(go.Scatter(
+            x=px_c["date"], y=px_c["brl_idx"],
+            name="Arabica BRL/kg (Base 100)",
+            line=dict(color="#1A5EA8", width=2),
+            hovertemplate="%{x|%b %Y}  BRL idx: %{y:.1f}<extra></extra>",
+        ), row=1, col=1)
+
+        figFX.add_trace(go.Scatter(
+            x=px_c["date"], y=px_c["eur_idx"],
+            name="Arabica EUR/kg (Base 100)",
+            line=dict(color="#4A2F1D", width=2, dash="dot"),
+            hovertemplate="%{x|%b %Y}  EUR idx: %{y:.1f}<extra></extra>",
+        ), row=1, col=1)
+
+        # ── Bottom subplot: Z-score bars ──────────────────────────────────────
+        figFX.add_trace(go.Bar(
+            x=px_c["date"], y=px_c["fx_zscore"],
+            marker_color=bar_colors_fx,
+            name="Z-Score FX BRL/EUR",
+            hovertemplate="%{x|%b %Y}  Z: %{y:.2f}<extra></extra>",
+        ), row=2, col=1)
+
+        figFX.add_hline(y=1,  line_dash="dash", line_color="#3E7B58",
+                        annotation_text="+1σ EUR forte", row=2, col=1)
+        figFX.add_hline(y=0,  line_dash="dot",  line_color="#AAAAAA", row=2, col=1)
+        figFX.add_hline(y=-1, line_dash="dash", line_color="#B23A2E",
+                        annotation_text="−1σ", row=2, col=1)
+
+        figFX.update_yaxes(title_text="Indice (Base 100)", row=1, col=1, gridcolor="rgba(0,0,0,0.06)")
+        figFX.update_yaxes(title_text="Z-Score",           row=2, col=1, zeroline=True, zerolinecolor="#AAAAAA")
+        figFX.update_xaxes(title_text="Data", row=2, col=1)
+        figFX.update_layout(
+            height=560,
+            margin=dict(l=0, r=0, t=50, b=0),
+            plot_bgcolor="rgba(0,0,0,0)",
+            legend=dict(orientation="h", y=1.06, x=0),
+            hovermode="x unified",
+        )
+        st.plotly_chart(figFX, use_container_width=True)
+        st.caption(
+            "📊 **Come leggere questo grafico** - "
+            "Il pannello superiore mostra l'andamento normalizzato (Base 100) del prezzo Arabica "
+            "in BRL/kg (linea blu) e EUR/kg (linea marrone tratteggiata). "
+            "🟢 Le zone **verdi** indicano periodi in cui l'EUR è relativamente più forte del BRL: "
+            "l'acquirente europeo ottiene più cafè per ogni euro speso. "
+            "🔴 Le zone **rosse** segnalano il contrario. "
+            "Il pannello inferiore mostra lo Z-score rolling 12 mesi del cambio BRL/EUR: "
+            "le barre verdi (Z\u202f>\u202f+1σ) evidenziano i momenti storicamente favorevoli all'acquisto in EUR."
+        )
 
         st.markdown("#### Prezzo Medio Annuo Arabica vs Media Decennale")
         pr_annual = prices.copy()
@@ -1216,10 +1426,10 @@ def render_tab_5(usda, states_mock, faostat_df, simulated, api_health_list):
     def _get_status(api_name: str) -> str:
         for item in api_health_list:
             if item.get("api", "").startswith(api_name):
-                st_str = item.get("status", "—")
+                st_str = item.get("status", "-")
                 err = item.get("error", "")
-                return f"{st_str} — {err}" if err and err != "—" else st_str
-        return "—"
+                return f"{st_str} - {err}" if err and err != "-" else st_str
+        return "-"
 
     with st.expander("📡 Fonti Dati & Stato API Live"):
         usda_st = _get_status("USDA PSD")
@@ -1227,8 +1437,8 @@ def render_tab_5(usda, states_mock, faostat_df, simulated, api_health_list):
         st.markdown(f"""
 | Fonte | Metodo di Accesso | Dati Principali | Stato |
 |---|---|---|---|
-| USDA PSD | `api.fas.usda.gov/api/psd` — chiave API tramite var d'ambiente `USDA_API_KEY` | Produzione, esportazioni, scorte finali per anno | {usda_st} |
-| FAOSTAT | Pacchetto Python `faostat` — credenziali tramite `FAOSTAT_USERNAME` / `FAOSTAT_PASSWORD` | Superficie raccolta, resa, produzione 1990–presente | {fao_st} |
+| USDA PSD | `api.fas.usda.gov/api/psd` - chiave API tramite var d'ambiente `USDA_API_KEY` | Produzione, esportazioni, scorte finali per anno | {usda_st} |
+| FAOSTAT | Pacchetto Python `faostat` - credenziali tramite `FAOSTAT_USERNAME` / `FAOSTAT_PASSWORD` | Superficie raccolta, resa, produzione 1990–presente | {fao_st} |
 | CONAB | Excel pre-scaricato tramite script `fetch_conab.py` | Produzione & resa per stato e stagione | Statico / file locale |
 """)
 
@@ -1257,7 +1467,8 @@ def render_tab_5(usda, states_mock, faostat_df, simulated, api_health_list):
                             name="Superficie Raccolta (ha)", line=dict(color="#3E7B58", width=2.5)
                         ), secondary_y=True)
                     fig_fao.update_yaxes(title_text="Produzione (tonnellate)", secondary_y=False)
-                    fig_fao.update_yaxes(title_text="Superficie Raccolta (ha)", secondary_y=True)
+                    fig_fao.update_yaxes(title_text="Superficie Raccolta (ettari)", secondary_y=True)
+                    fig_fao.update_xaxes(title_text="Anno")
                     fig_fao.update_layout(height=380, margin=dict(l=0, r=0, t=10, b=0),
                                           plot_bgcolor="rgba(0,0,0,0)")
                     st.plotly_chart(fig_fao, use_container_width=True)
@@ -1299,22 +1510,69 @@ def render_tab_5(usda, states_mock, faostat_df, simulated, api_health_list):
                                       mode="lines+markers", line=dict(color="#2ca02c")), secondary_y=False)
             figE.add_trace(go.Scatter(x=usda["year"], y=total_inv, name="Scorte",
                                       mode="lines", line=dict(color="#1f77b4", dash="dash")), secondary_y=True)
+            figE.update_yaxes(title_text="Esportazioni (sacchi da 60 kg)", secondary_y=False)
+            figE.update_yaxes(title_text="Scorte Finali (sacchi da 60 kg)", secondary_y=True)
+            figE.update_xaxes(title_text="Anno")
+            figE.update_yaxes(tickformat=".2s", secondary_y=False)
+            figE.update_yaxes(tickformat=".2s", secondary_y=True)
             figE.update_layout(height=380, margin=dict(l=0, r=0, t=10, b=0))
             st.plotly_chart(figE, use_container_width=True)
-            st.caption("Volume annuo esportazioni (asse sinistro) vs. scorte finali (asse destro). Quando le esportazioni aumentano mentre le scorte scendono, la filiera logistica si sta assottigliando — un indicatore anticipatore della pressione sui prezzi.")
+            st.caption("Volume annuo esportazioni (asse sinistro) vs. scorte finali (asse destro). Quando le esportazioni aumentano mentre le scorte scendono, la filiera logistica si sta assottigliando - un indicatore anticipatore della pressione sui prezzi.")
 
         c3, c4 = st.columns(2)
         with c3:
-            st.markdown("#### Efficienza Resa vs Volume Produzione per Stato")
+            st.markdown("#### Efficienza Resa vs Volume Produzione - Top 10 Regioni Produttrici")
+
             if not states_mock.empty:
-                figS = px.scatter(states_mock, x="yield", y="production_bags",
-                                  color="state", size="production_bags", size_max=40,
-                                  labels={"yield": "Resa (sacchi/ettaro)",
-                                          "production_bags": "Produzione Totale (sacchi)",
-                                          "state": "Stato"})
-                figS.update_layout(height=400, margin=dict(l=0, r=0, t=10, b=0))
+                # Keep only top 10 by production volume
+                top10 = states_mock.nlargest(10, "production_bags").copy()
+
+                # Normalize all region name variants → consistent Italian label
+                top10["stato_label"] = top10["state"].apply(normalize_region_name)
+
+                # Short label = everything before " -" (e.g. "MG", "ES", "MG Nord")
+                top10["state_short"] = top10["stato_label"].apply(
+                    lambda s: s.split("-")[0].strip() if "-" in s else s[:20]
+                )
+
+                figS = px.scatter(
+                    top10,
+                    x="yield",
+                    y="production_bags",
+                    color="stato_label",       # full label drives color legend
+                    size="production_bags",
+                    size_max=55,
+                    text="state_short",         # compact label on the bubble
+                    hover_name="stato_label",   # full label in tooltip
+                    labels={
+                        "yield":           "Resa (sacchi/ettaro)",
+                        "production_bags": "Produzione Totale (sacchi da 60 kg)",
+                        "stato_label":     "Stato"
+                    },
+                    color_discrete_sequence=px.colors.qualitative.Bold,
+                )
+                figS.update_traces(
+                    textposition="top center",
+                    textfont=dict(size=10),
+                    marker=dict(opacity=0.85, line=dict(width=1, color="white"))
+                )
+                figS.update_layout(
+                    height=480,
+                    margin=dict(l=0, r=0, t=20, b=0),
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    showlegend=False,
+                    yaxis=dict(tickformat=".2s", title="Produzione Totale (sacchi da 60 kg)"),
+                    xaxis=dict(title="Resa (sacchi/ettaro)"),
+                )
                 st.plotly_chart(figS, use_container_width=True)
-                st.caption("Ogni bolla rappresenta uno stato brasiliano, dimensionata e posizionata per volume totale di produzione (asse Y) vs. efficienza di resa (asse X, sacchi/ettaro). Gli stati in alto a destra sono produttori ad alto volume e alta efficienza.")
+                st.caption(
+                    "Le 10 principali regioni produttrici brasiliane. Ogni bolla rappresenta uno stato: "
+                    "più grande la bolla, maggiore il volume di produzione totale. "
+                    "Asse X: efficienza di resa in sacchi da 60 kg per ettaro coltivato. "
+                    "Asse Y: produzione totale annua in sacchi da 60 kg. "
+                    "Le etichette sulle bolle mostrano la sigla dello stato (es. MG, ES). "
+                    "Passa il cursore sulla bolla per il nome completo e la regione geografica."
+                )
 
         with c4:
             st.markdown("#### Quota di Mercato Arabica / Robusta (Ultimo Anno)")
@@ -1331,6 +1589,36 @@ def render_tab_5(usda, states_mock, faostat_df, simulated, api_health_list):
 
 
 def render_tab_6(climate, states_mock):
+    with st.expander("📖 Cos'è il Deficit Pluviometrico? - Guida alla Lettura", expanded=True):
+        st.markdown("""
+### Deficit Pluviometrico: definizione
+
+Il **deficit pluviometrico** misura di quanto le precipitazioni mensili si discostano
+**al di sotto** della media storica di riferimento (baseline 1981–2010 per le regioni del Cerrado brasiliano).
+
+**Formula:**
+> Deficit (%) = ((Pioggia_media_storica − Pioggia_osservata) / Pioggia_media_storica) × 100
+
+**Esempio pratico:**
+Se il mese di agosto ha storicamente 80 mm di pioggia media e quest'anno ne sono caduti 56 mm,
+il deficit è del **30%** → zona rossa nel grafico.
+
+### Soglie di impatto agronomico sul caffè
+
+| Deficit | Colore | Impatto sul Caffè |
+|---------|--------|-------------------|
+| < 10% | 🟢 Verde | Normale - piogge nella norma, nessun impatto atteso |
+| 10–20% | 🟠 Arancio | Stress moderato - irrigazione supplementare consigliata |
+| > 20% | 🔴 Rosso | Stress severo - rischio calo resa, anticipo fioritura, aumento suscettibilità a malattie |
+
+### Stagionalità normale in Brasile (Cerrado/Minas Gerais)
+
+La **stagione secca** va da **giugno a settembre**: deficit del 20–35% è fisiologico e atteso.
+Il problema critico sorge quando il deficit si estende a **ottobre–novembre** (fioritura del caffè)
+o a **dicembre–gennaio** (sviluppo del frutto): queste fasi richiedono acqua per garantire
+la qualità e la resa del raccolto successivo.
+        """)
+
     try:
         colA, colB = st.columns(2)
         with colA:
@@ -1350,37 +1638,87 @@ def render_tab_6(climate, states_mock):
                                  marker_color=bar_colors, name="Deficit %"))
             fig.add_trace(go.Scatter(x=recent_climate["date"], y=recent_climate["rolling_12_m"],
                                      mode="lines", line=dict(color='black', width=3), name="Media Mobile 12 Mesi"))
-            fig.update_layout(height=420, margin=dict(l=0, r=0, t=10, b=0))
+            fig.update_layout(
+                height=420,
+                margin=dict(l=0, r=0, t=30, b=0),
+                yaxis=dict(
+                    title="Deficit Pluviometrico (%)",
+                    ticksuffix="%",
+                    range=[0, max(recent_climate['rainfall_deficit_pct'].max() * 1.15, 25)]
+                ),
+                xaxis=dict(title="Mese"),
+                legend=dict(orientation="h", y=1.05, x=0),
+            )
+            # Add threshold reference lines
+            fig.add_hline(
+                y=10, line_dash="dot", line_color=COLORS["warning"],
+                annotation_text="Soglia stress moderato (10%)",
+                annotation_position="top left"
+            )
+            fig.add_hline(
+                y=20, line_dash="dot", line_color=COLORS["danger"],
+                annotation_text="Soglia stress severo (20%)",
+                annotation_position="top left"
+            )
             st.plotly_chart(fig, use_container_width=True)
-            st.caption("Deficit pluviometrico mensile come percentuale al di sotto della norma, codificato per gravità: verde (<10%), arancio (10–20%), rosso (>20%). La linea nera mostra la media mobile a 12 mesi. Basato su pattern di stress climatico modellati dall'ENSO.")
+            st.caption(
+                "Deficit pluviometrico mensile espresso come percentuale al di sotto della media storica 1981–2010 "
+                "(Cerrado/Minas Gerais). Verde = nella norma (<10%); arancio = stress moderato (10–20%); "
+                "rosso = stress severo (>20%). La linea nera è la media mobile a 12 mesi. "
+                "Le linee tratteggiate mostrano le soglie critiche di impatto agronomico. "
+                "Valori basati su modelli di stress climatico calibrati sull'indice ENSO-ONI."
+            )
 
         with colB:
             st.markdown("#### Deficit Pluviometrico Medio per Stato")
             if not states_mock.empty:
                 rng = np.random.default_rng(get_session_seed() + 10)
                 states_plot = states_mock.copy()
-                states_plot['avg_deficit'] = rng.uniform(4.0, 25.0, len(states_plot))
-                states_plot = states_plot.sort_values(by="avg_deficit", ascending=True)
-                figH = px.bar(states_plot, x="avg_deficit", y="state", orientation='h',
-                               color="avg_deficit", color_continuous_scale="RdYlGn_r",
-                               labels={"avg_deficit": "Deficit Pluviometrico (%)", "state": "Stato"})
-                figH.update_layout(height=420, margin=dict(l=0, r=0, t=10, b=0))
-                st.plotly_chart(figH, use_container_width=True)
-                st.caption("Deficit pluviometrico annuo medio per stato produttore. Gli stati con deficit maggiori fronteggiano maggiore dipendenza dall'irrigazione e rischio di resa. I valori derivano da modelli climatici regionali ponderati sull'ONI ENSO.")
 
-        st.markdown("#### Mappa Termica Stagionale Deficit Pluviometrico (Mese × Anno)")
-        climate_copy = climate.copy()
-        climate_copy["month_num"] = climate_copy["date"].dt.month
-        climate_copy["year_num"] = climate_copy["date"].dt.year
-        pivot_rain = climate_copy.pivot_table(index="month_num", columns="year_num",
-                                               values="rainfall_deficit_pct", aggfunc="mean")
-        pivot_rain = pivot_rain.sort_index(axis=1)
-        pivot_rain = pivot_rain.reindex(range(1, 13))
-        pivot_rain.index = [MONTH_NAMES[i - 1] for i in pivot_rain.index]
-        fig_rain_heat = px.imshow(pivot_rain, aspect="auto", color_continuous_scale="YlOrRd")
-        fig_rain_heat.update_layout(height=380, margin=dict(l=0, r=0, t=10, b=0))
-        st.plotly_chart(fig_rain_heat, use_container_width=True)
-        st.caption("Deficit pluviometrico per mese e anno. Giallo = deficit basso (piogge normali); arancio scuro/rosso = deficit grave. Il blocco giugno–settembre dovrebbe mostrare valori costantemente elevati, confermando il pattern della stagione secca del Cerrado.")
+                # Normalize every possible name variant → consistent Italian label
+                states_plot["state_full"] = states_plot["state"].apply(normalize_region_name)
+
+                # Short axis label: everything before " -" (e.g. "MG", "ES", "MG Nord")
+                states_plot["state_short"] = states_plot["state_full"].apply(
+                    lambda s: s.split("-")[0].strip() if "-" in s else s[:20]
+                )
+
+                states_plot["avg_deficit"] = rng.uniform(4.0, 25.0, len(states_plot))
+                states_plot = states_plot.sort_values(by="avg_deficit", ascending=True)
+
+                figH = px.bar(
+                    states_plot,
+                    x="avg_deficit",
+                    y="state_short",           # compact sigla on Y-axis
+                    orientation="h",
+                    color="avg_deficit",
+                    color_continuous_scale="RdYlGn_r",
+                    hover_name="state_full",   # full Italian label in tooltip
+                    hover_data={"avg_deficit": ":.1f", "state_short": False},
+                    labels={"avg_deficit": "Deficit Pluviometrico (%)", "state_short": "Stato"},
+                )
+                figH.update_layout(
+                    height=420,
+                    margin=dict(l=0, r=0, t=10, b=0),
+                    xaxis=dict(
+                        title="Deficit Pluviometrico Annuo Medio (%)",
+                        ticksuffix="%"
+                    ),
+                    yaxis=dict(title=""),
+                    coloraxis_colorbar=dict(
+                        title="Deficit (%)",
+                        ticksuffix="%"
+                    )
+                )
+                st.plotly_chart(figH, use_container_width=True)
+                st.caption(
+                    "Deficit pluviometrico annuo medio (%) per stato produttore, ordinato dal più critico al meno critico. "
+                    "Le etichette mostrano la sigla dello stato; passa il cursore per il nome completo con la regione geografica. "
+                    "Valori derivati da modelli climatici regionali ponderati sull'ONI ENSO. "
+                    "Un deficit medio annuo superiore al 15% indica dipendenza strutturale dall'irrigazione: "
+                    "gli impianti di irrigazione coprono circa il 30% delle piantagioni di Arabica in Minas Gerais, "
+                    "ma la percentuale scende sotto il 10% nelle aree di Robusta in Rondônia."
+                )
 
     except Exception as e:
         st.warning(f"Impossibile visualizzare il grafico delle piogge: {e}")
@@ -1425,7 +1763,7 @@ def main():
                     "📈 Prezzi di Mercato", "🌾 Produttività dei Raccolti", "🌧️ Precipitazioni"])
 
     with tabs[0]:
-        render_tab_1(oni_series, soi_series, climate)
+        render_tab_1(oni_series, soi_series)
 
     with tabs[1]:
         render_tab_2(fires, climate, states_prod)

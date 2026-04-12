@@ -1,742 +1,706 @@
-# Documentazione Tecnica & di Business
-# Dashboard Intelligence Filiera Caffè — Lavazza Brazil Origins
-## Guida Completa per la Presentazione
+# Documentazione Tecnica — Dashboard Intelligence Filiera Caffè
+## Lavazza Brazil Origins Intelligence · Aprile 2026
 
 ---
 
 > **A chi è rivolto questo documento**
-> Questo documento è strutturato per essere comprensibile a tre tipi di pubblico simultaneamente:
-> - **Business & Management**: comprende il valore strategico di ogni dato senza entrare nei tecnicismi
-> - **Analisti & Data Analyst**: comprende la struttura dei dati, le metriche e come interpretare i grafici
-> - **Data Scientists & Sviluppatori**: comprende le API, i formati dati, i limiti tecnici e le opportunità di sviluppo
+>
+> Il documento è strutturato per tre tipologie di lettore simultanee:
+> - 🏢 **Business & Management**: valore strategico di ogni dato, senza tecnicismi.
+> - 📊 **Analisti & Data Analyst**: struttura dei dati, metriche, logica interpretativa.
+> - 🛠️ **Data Scientists & Sviluppatori**: API, formati, limiti tecnici, opportunità di evoluzione.
 
 ---
 
 ## 🚀 COME AVVIARE LA DASHBOARD
 
-### File richiesti
-
-Per eseguire la dashboard sono necessari i seguenti file nella stessa cartella di progetto:
-
-| File | Ruolo |
-|------|-------|
-| `app_standalone.py` | Applicazione Streamlit principale — contiene tutta la logica di fetch, caching e rendering dei grafici. È l'unico file da passare a `streamlit run`. |
-| `dashboard_core.py` | Modulo di supporto con costanti condivise, utilità e funzioni ausiliarie richiamate da `app_standalone.py`. Deve essere presente nella stessa directory. |
-| `fetch_conab.py` | Script indipendente per il download e il parsing del report Excel CONAB. Va eseguito separatamente, prima di avviare la dashboard. |
-
----
-
 ### Prerequisiti
 
-1. **Python ≥ 3.10** installato sul sistema.
-2. **Dipendenze Python** installate tramite il file `requirements.txt` incluso nel progetto:
+| Requisito | Versione minima |
+|-----------|----------------|
+| Python | ≥ 3.10 |
+| Streamlit | ≥ 1.32 |
+| pip | ≥ 23 |
 
 ```bash
+# Installa tutte le dipendenze
 pip install -r requirements.txt
+pip install geopandas websockets faostat openpyxl yfinance
 ```
 
-Il file `requirements.txt` include le librerie principali:
-
-```
-pymongo
-python-dotenv
-streamlit
-pandas
-numpy
-plotly
-requests
-matplotlib
-scipy
-beautifulsoup4
-```
-
-Alcune librerie aggiuntive **non incluse** nel `requirements.txt` potrebbero essere necessarie a seconda dell'ambiente; installarle separatamente se mancanti:
+### Variabili d'ambiente (opzionali ma consigliate)
 
 ```bash
-pip install geopandas websockets faostat openpyxl
-```
-
-3. **Variabili d'ambiente** per i dati live (vedi sezione dedicata sotto):
-
-```bash
-# Creare un file .env nella cartella del progetto, oppure esportare nel terminale
 export USDA_API_KEY="la-tua-chiave-usda"
-export FAOSTAT_USERNAME="la-tua-email-fao"
-export FAOSTAT_PASSWORD="la-tua-password-fao"
+export FAOSTAT_USERNAME="email@esempio.com"
+export FAOSTAT_PASSWORD="password"
 ```
 
-> **Nota:** Senza queste variabili la dashboard funziona comunque in modalità **Dati Simulati**, che non richiede alcuna autenticazione.
+> Senza queste variabili la dashboard funziona ugualmente in modalità **Dati Simulati**.
 
----
-
-### Come ottenere le credenziali e le chiavi API
-
-Ogni fonte dati richiede una registrazione separata. Di seguito i passaggi per ciascuna:
-
-#### 🔑 USDA API Key
-1. Andare su [https://apps.fas.usda.gov/psdonline/app/index.html#/app/registration](https://apps.fas.usda.gov/psdonline/app/index.html#/app/registration)
-2. Registrarsi gratuitamente con nome, cognome ed e-mail istituzionale.
-3. Una volta approvata la richiesta (tipicamente entro poche ore), si riceve la chiave via e-mail.
-4. Impostarla come variabile d'ambiente: `export USDA_API_KEY="xxxxx"`
-
-#### 🔑 FAOSTAT Username & Password
-1. Andare su [https://www.fao.org/registration/](https://www.fao.org/registration/) e creare un account FAO gratuito.
-2. Le credenziali FAO (e-mail e password) sono le stesse da usare nella dashboard.
-3. Impostarle come variabili: `export FAOSTAT_USERNAME="email@esempio.com"` e `export FAOSTAT_PASSWORD="password"`
-> **Nota:** Se FAOSTAT non richiede autenticazione nel momento dell'uso, le variabili possono essere lasciate vuote — la libreria tenta comunque l'accesso pubblico.
-
-#### 🔑 NASA FIRMS Map Key
-1. Andare su [https://firms.modaps.eosdis.nasa.gov/api/area/](https://firms.modaps.eosdis.nasa.gov/api/area/)
-2. Cliccare su **"Get MAP_KEY"** e registrarsi con un account Earth Data NASA (gratuito).
-3. La chiave viene mostrata subito dopo la registrazione.
-4. La chiave è attualmente hardcoded nella costante `FIRMS_MAP_KEY` in `app_standalone.py` — sostituire il valore con la propria chiave.
-
-#### 🔑 ER-API (Exchange Rates)
-- **Nessuna registrazione richiesta.** L'endpoint `open.er-api.com` è pubblico e gratuito per uso base (1.500 chiamate/mese).
-- Non è necessaria alcuna chiave API nella configurazione attuale della dashboard.
-
-#### 🔑 AISStream.io API Key
-1. Andare su [https://aisstream.io/](https://aisstream.io/) e registrarsi gratuitamente.
-2. Dal pannello utente, copiare la propria API Key.
-3. La chiave è attualmente hardcoded nella costante `AIS_API_KEY` in `app_standalone.py` — sostituire il valore con la propria chiave.
-> **Nota:** Il piano gratuito di AISStream è sufficiente per la demo. Per copertura AIS completa sui porti brasiliani è necessario un piano premium.
-
----
-
-### Passo 1 — Aggiornare i dati CONAB
-
-Prima di avviare la dashboard, eseguire una volta lo script di scraping CONAB per scaricare il report più recente:
+### Avvio
 
 ```bash
+# 1. Aggiorna i dati CONAB (una volta, o prima di ogni presentazione)
 python3 fetch_conab.py
-```
 
-Lo script scarica l'ultimo Excel dal sito `gov.br/conab`, lo analizza e salva il risultato in:
-
-```
-data_sources/conab/conab_data.csv
-```
-
-> **Quando ripetere questo passo:** Il CONAB pubblica nuovi Levantamentos de Café circa 5-6 volte all'anno. Si consiglia di schedulare questo script (es. via cron job mensile) oppure di eseguirlo manualmente prima di ogni presentazione importante.
-
----
-
-### Passo 2 — Avviare la dashboard Streamlit
-
-Dalla cartella del progetto, eseguire:
-
-```bash
+# 2. Avvia la dashboard
 streamlit run app_standalone.py
 ```
 
-Streamlit avvierà automaticamente il browser predefinito all'indirizzo:
-
-```
-http://localhost:8501
-```
-
-> **Opzioni utili:**
-> ```bash
-> # Specificare una porta diversa
-> streamlit run app_standalone.py --server.port 8080
->
-> # Avviare senza aprire il browser automaticamente
-> streamlit run app_standalone.py --server.headless true
-> ```
-
----
-
-### Riepilogo rapido (copia-incolla)
-
-```bash
-# 1. Installa le dipendenze (solo la prima volta)
-pip install -r requirements.txt
-pip install geopandas websockets faostat openpyxl   # se non già presenti
-
-# 2. Aggiorna i dati CONAB
-python3 fetch_conab.py
-
-# 3. Avvia la dashboard
-streamlit run app_standalone.py
-```
-
-Una volta aperta la dashboard, selezionare **"Dati API Reali"** dalla sidebar sinistra per usare le fonti live, oppure **"Dati Simulati"** per una demo offline senza chiavi API.
+Streamlit apre automaticamente il browser su `http://localhost:8501`.
 
 ---
 
 ## PARTE 1 — PANORAMICA DELLA DASHBOARD
 
-### Cos'è questa dashboard?
+### Cos'è e a cosa serve
 
-La dashboard è un sistema centralizzato di monitoraggio e visualizzazione dati che aggrega informazioni provenienti da **8 fonti dati globali** in tempo reale o semi-reale, con l'obiettivo di fornire a Lavazza una visione integrata della filiera del caffè brasiliano.
+La dashboard è un sistema centralizzato di **monitoraggio e visualizzazione Intelligence** che aggrega dati da 8 fonti globali — climatiche, agronomiche, logistiche e finanziarie — per fornire a Lavazza una visione integrata della filiera del caffè brasiliano.
 
-Il Brasile è il **primo produttore mondiale di caffè**, responsabile di circa il 35-40% dell'intera produzione globale. Monitorare le condizioni climatiche, produttive, logistiche e di mercato in Brasile significa avere visibilità anticipata sui rischi che impattano direttamente i costi di approvvigionamento e la disponibilità di materia prima.
+Il Brasile è il **primo produttore mondiale di caffè**, responsabile del 35–40% dell'intera produzione globale. Monitorare clima, produzione, logistica portuale e mercati cambi in Brasile significa avere visibilità anticipata sui rischi che impattano direttamente i **costi di approvvigionamento** e la **disponibilità di materia prima**.
 
 ### Filosofia della dashboard
 
-La dashboard è progettata come uno strumento di **esplorazione dati puri**, non di previsione. Non contiene modelli predittivi né raccomandazioni automatiche. Ogni scheda mostra i dati disponibili così come sono — il valore sta nel permettere agli esperti di dominio (buyers, agronomi, logistici) di vedere tutto in un unico posto e identificare correlazioni rilevanti.
+La dashboard è uno strumento di **esplorazione dati puri**, non di previsione. Non contiene modelli predittivi né raccomandazioni automatiche. Il valore sta nel permettere a buyer, agronomi e logistici di vedere tutto in un unico posto e identificare correlazioni rilevanti in modo autonomo e informato.
 
-### Struttura: 6 Schede Tematiche
+### Le 6 Schede Tematiche
 
-| Scheda | Tema | Fonte Principale |
+| Scheda | Tema | Fonte principale |
 |--------|------|-----------------|
-| 🌦️ Clima & ENSO | Fenomeni climatici globali che influenzano le piogge | NOAA |
-| 🔥 Incendi | Rilevamenti satellitari di incendi attivi in Brasile | NASA FIRMS |
-| ⚓ Navi & Porti | Traffico marittimo e congestione dei porti export | AISStream.io |
-| 📈 Prezzi di Mercato | Prezzi commodity caffè e tassi di cambio | World Bank / ER-API |
-| 🌾 Produttività Colture | Produzione, resa e stock per anno | USDA PSD / FAOSTAT / CONAB |
-| 🌧️ Precipitazioni | Deficit pluviometrico per stagione e stato | NOAA (modellato) |
+| 🌦️ Clima & ENSO | Fenomeni climatici globali | NOAA |
+| 🔥 Incendi | Focolai satellitari attivi in Brasile | NASA FIRMS |
+| ⚓ Navi & Porti | Traffico + congestione porti export | AISStream.io + modello |
+| 📈 Prezzi di Mercato | Prezzi commodity e tassi di cambio | World Bank + yfinance |
+| 🌾 Produttività | Produzione, resa e stock per anno | USDA PSD / FAOSTAT / CONAB |
+| 🌧️ Precipitazioni | Deficit pluviometrico per stato | NOAA (modellato) |
 
 ---
 
-## PARTE 2 — LE API: DESCRIZIONE DETTAGLIATA
+## PARTE 2 — LE FONTI DATI
 
-### 2.1 NOAA — National Oceanic and Atmospheric Administration
-**Indici ENSO: ONI e SOI**
+### 2.1 NOAA — ONI e SOI (Indici ENSO)
 
-**Chi è NOAA?**
-La NOAA è l'agenzia governativa americana che gestisce il monitoraggio dell'oceano e dell'atmosfera globale. I suoi dati sono il gold standard internazionale per la meteorologia e la climatologia. Pubblica gratuitamente decenni di dati storici.
+**Chi è NOAA**: L'agenzia governativa americana che gestisce il monitoraggio oceanico e atmosferico globale. I suoi dati sono il gold standard internazionale per la climatologia.
 
-**Cosa forniamo dalla NOAA:**
-
-**Indice ONI — Oceanic Niño Index**
-- **Cos'è**: Misura l'anomalia termica (in gradi Celsius) della superficie oceanica nella regione Niño 3.4 del Pacifico Centrale, usando una media mobile trimestrale.
-- **Perché importa**: Le temperature oceaniche nel Pacifico guidano i pattern di pioggia e siccità in tutto il Sud America. Quando il Pacifico si scalda (El Niño), il Brasile nord-orientale e la regione amazzonica soffrono di siccità, aumentando il rischio di incendi. Quando si raffredda (La Niña), il Sud del Brasile riceve piogge eccessive.
-- **Come si legge**: ONI > +0.5°C per almeno 5 mesi consecutivi = El Niño. ONI < -0.5°C = La Niña. Tra -0.5 e +0.5 = fase neutra.
-- **Frequenza aggiornamento**: Mensile. La dashboard aggiorna i dati ogni 24 ore.
-- **Endpoint**: `https://psl.noaa.gov/data/correlation/oni.data` — file di testo a larghezza fissa, pubblico e senza autenticazione.
-- **Storico disponibile**: Dal 1950 ad oggi.
-
-**Indice SOI — Southern Oscillation Index**
-- **Cos'è**: Misura la differenza di pressione atmosferica standardizzata tra Tahiti (Pacifico Est) e Darwin (Australia), calcolata mensilmente dalla NOAA.
-- **Perché importa**: Il SOI è la componente "atmosferica" dell'ENSO, mentre l'ONI è quella "oceanica". Quando entrambi superano le soglie (ONI e SOI concordano) si parla di **evento accoppiato**, che produce impatti agricoli molto più severi e prevedibili rispetto a quando i due indici divergono.
-- **Come si legge**: SOI > +7 = La Niña confermata atmosfericamente. SOI < -7 = El Niño confermato. Un ONI positivo con SOI positivo indica un disaccoppiamento: l'evento è débole o si sta attenuando.
-- **Frequenza aggiornamento**: Mensile. Cache 24 ore nella dashboard.
-- **Endpoint**: `https://psl.noaa.gov/data/correlation/soi.data` — stessa struttura dell'ONI.
-
-**Nota tecnica importante**: Entrambi i file NOAA usano il valore `-99.90` per i mesi non ancora registrati (mesi futuri dell'anno corrente). La dashboard filtra automaticamente questi valori e prende solo l'ultimo mese con dato valido.
+| Parametro | Dettaglio |
+|-----------|-----------|
+| Endpoint ONI | `https://psl.noaa.gov/data/correlation/oni.data` |
+| Endpoint SOI | `https://psl.noaa.gov/data/correlation/soi.data` |
+| Formato | File di testo a larghezza fissa. Il valore `-99.90` indica mesi non ancora registrati (filtrato automaticamente). |
+| Cache | 24 ore |
+| Autenticazione | Nessuna |
+| Storico | Dal 1950 ad oggi |
 
 ---
 
-### 2.2 NASA FIRMS — Fire Information for Resource Management System
+### 2.2 NASA FIRMS — Incendi Attivi
 
-**Chi è NASA FIRMS?**
-NASA FIRMS è il sistema della NASA che distribuisce in tempo quasi-reale i dati di rilevamento degli incendi da satellite. Utilizza i sensori VIIRS (Visible Infrared Imaging Radiometer Suite) a bordo dei satelliti Suomi NPP e NOAA-20.
-
-**Cosa forniamo:**
-- **FRP — Fire Radiative Power**: Potenza radiativa del fuoco in Megawatt (MW). È la misura dell'intensità di un incendio rilevato da satellite. Più alto è il valore FRP, più intenso è l'incendio.
-- **Coordinate geografiche**: Latitudine e longitudine di ogni focolaio rilevato.
-- **Data di rilevamento**: Il file copre gli ultimi N giorni configurabili (nella dashboard: 5 giorni).
-
-**Perché importa per il caffè?**
-Gli incendi nel Cerrado (savana brasiliana) e in Amazzonia impattano direttamente le piantagioni di caffè in tre modi:
-1. **Danno diretto**: I fuochi si propagano alle piantagioni, distruggendo il raccolto.
-2. **Danno indiretto da fumo**: Il particolato riduce la fotosintesi delle piante nelle settimane successive.
-3. **Effetto suolo**: Le ceneri alterano il pH e la composizione chimica del suolo, impattando le rese future.
-
-**Come funziona tecnicamente:**
-- **API**: `https://firms.modaps.eosdis.nasa.gov/api/area/csv/{MAP_KEY}/{SOURCE}/{BBOX}/{DAYS}`
-- **MAP_KEY**: Chiave personale ottenibile gratuitamente dal sito NASA FIRMS.
-- **SOURCE**: `VIIRS_SNPP_NRT` (Near Real-Time, Suomi NPP).
-- **BBOX**: Bounding box geografica in formato `lon_min,lat_min,lon_max,lat_max`. Per il Brasile: `-75,-35,-33,6`.
-- **Output**: File CSV con colonne: `latitude`, `longitude`, `bright_ti4`, `bright_ti5`, `frp`, `daynight`, `acq_date`, ecc.
-- **Latenza**: I dati NRT (Near Real-Time) sono disponibili circa 3 ore dopo il passaggio del satellite.
-- **Aggiornamento**: Ogni 12 ore (doppio passaggio dei satelliti in orbita polare).
-
-**Come visualizziamo i dati:**
-La mappa usa **Matplotlib + GeoPandas** per sovrapporre tre layer:
-1. Layer base: confini degli stati brasiliani (GeoJSON IBGE).
-2. Layer produzione: colorazione coropletica degli stati per volume di produzione di Arabica (verde) o Robusta (viola).
-3. Layer incendi piccoli (FRP ≤ 50 MW): punti grigi semitrasparenti.
-4. Layer incendi grandi (FRP > 50 MW): punti colorati con gradiente `hot` (rosso scuro → arancione → giallo), dimensionati proporzionalmente a `√FRP × 3`.
-
-La scelta di separare piccoli e grandi incendi è deliberata: i focolai minori (disboscamento controllato, fuochi agricoli) sono rumore di fondo. I grandi incendi (FRP > 50 MW) sono quelli che costituiscono un rischio reale per le colture.
+| Parametro | Dettaglio |
+|-----------|-----------|
+| Endpoint | `https://firms.modaps.eosdis.nasa.gov/api/area/csv/{MAP_KEY}/VIIRS_SNPP_NRT/{BBOX}/{DAYS}` |
+| Bbox Brasile | `-75,-35,-33,6` |
+| Output | CSV: `latitude`, `longitude`, `frp` (Fire Radiative Power, MW) |
+| Latenza | ~3 ore dopo il passaggio del satellite |
+| Cache | 1 ora |
 
 ---
 
-### 2.3 AISStream.io — Automatic Identification System Live Stream
+### 2.3 AISStream.io — Traffico Marittimo Live
 
-**Cos'è AIS?**
-L'AIS (Automatic Identification System) è un sistema di tracciamento marittimo obbligatorio per tutte le navi commerciali sopra le 300 tonnellate. Ogni nave trasmette continuamente via VHF la propria posizione, velocità, rotta e tipo di nave. Esistono reti globali di ricevitori a terra e satellitari che aggregano questi segnali.
-
-**Cos'è AISStream.io?**
-AISStream.io è un servizio che distribuisce i dati AIS via WebSocket in tempo reale. La dashboard si connette direttamente tramite WebSocket (protocollo `wss://`) e riceve un flusso continuo di messaggi JSON.
-
-**Tipi di messaggi ricevuti:**
-- **PositionReport**: Posizione aggiornata ogni 2-10 secondi per ogni nave. Contiene: latitudine, longitudine, SOG (Speed Over Ground in nodi), stato navigazionale (0=in navigazione, 1=all'ancora, 5=ormeggiata).
-- **ShipStaticData**: Dati statici della nave trasmessi ogni 6 minuti. Contiene: nome, MMSI (identificativo univoco), tipo di nave (codice AIS 70-89 = cargo).
-
-**Codici tipo nave AIS rilevanti:**
-| Codice | Tipo |
-|--------|------|
-| 70 | Cargo generico |
-| 71 | Cargo, pericolosi (cat A) |
-| 72 | Cargo, pericolosi (cat B) |
-| 73 | Cargo, pericolosi (cat C) |
-| 74 | Cargo, pericolosi (cat D) |
-| 79 | Cargo (non classificato) |
-| 80-89 | Petroliere e chimichiere |
-
-**Limitazione importante del tier gratuito:**
-Il tier gratuito di AISStream.io ha copertura concentrata sui grandi hub marittimi globali (Asia, Nord Europa, West Coast USA). La copertura nei porti brasiliani è frammentata e insufficiente per un monitoraggio affidabile. **Per questa ragione, la demo live utilizza Singapore, Rotterdam e Los Angeles** come porti di riferimento per dimostrare il funzionamento del sistema. I dati di congestione dei porti brasiliani (Santos, Vitória, Paranaguá, Rio de Janeiro, Salvador) sono invece **stimati con un modello** basato su stress climatico e pattern storici.
-
-**Per ottenere dati AIS affidabili sui porti brasiliani in produzione**, sarebbe necessario sottoscrivere un piano premium di un provider come MarineTraffic, VesselFinder, o acquistare feed AIS satellitari (es. Spire Maritime, exactEarth).
-
-**I 5 porti brasiliani monitorati:**
-| Porto | Quota export caffè |
-|-------|-------------------|
-| Santos (SP) | ~60% del totale nazionale |
-| Vitória (ES) | ~25% |
-| Paranaguá (PR) | ~8% |
-| Rio de Janeiro (RJ) | ~4% |
-| Salvador (BA) | ~3% |
+| Parametro | Dettaglio |
+|-----------|-----------|
+| Protocollo | WebSocket (`wss://stream.aisstream.io/v0/stream`) |
+| Messaggi | `PositionReport` (posizione + SOG) e `ShipStaticData` (tipo nave) |
+| Filtro tipo | Cargo AIS 70–89. Codici sconosciuti (0) inclusi per prudenza. |
+| Limitazione tier gratuito | Copertura concentrata su Asia, Nord Europa, West Coast USA. I porti brasiliani usano stime modellistiche. |
 
 ---
 
-### 2.4 World Bank Commodity Price Data — "Pink Sheet"
+### 2.4 World Bank Commodity Prices — "Pink Sheet"
 
-**Cos'è?**
-La Banca Mondiale pubblica mensilmente il "Pink Sheet" (foglio rosa), un dataset storico dei prezzi delle principali commodity globali. Per il caffè, riporta le quotazioni ICE (Intercontinental Exchange) di New York per l'Arabica e di Londra per la Robusta.
-
-**Dati forniti:**
-- **Arabica**: Prezzo in USD/kg, contratto ICE New York "Other Milds" (qualità lavata centro-americana, usata come benchmark internazionale).
-- **Robusta**: Prezzo in USD/kg, contratto ICE Liffe Londra.
-- **Frequenza**: Mensile, con storico dal 1960.
-
-**Come accediamo:**
-- **Endpoint**: File Excel (`.xlsx`) scaricato direttamente dalla Banca Mondiale.
-- **URL**: Diretto link al file Excel CMO (Commodity Markets Outlook), foglio 2, righe 4-5 come header.
-- **Parsing**: La dashboard legge il file Excel in memoria, identifica le colonne caffè tramite keyword "coffee", e converte i prezzi da USD a EUR usando il tasso di cambio live.
-- **Aggiornamento**: Il Pink Sheet viene aggiornato ogni mese (solitamente intorno al 10 del mese).
-
-**Conversione valutaria:**
-I prezzi vengono convertiti in EUR/kg usando il tasso di cambio live fornito da ER-API (vedi paragrafo successivo).
+| Parametro | Dettaglio |
+|-----------|-----------|
+| Formato | File Excel .xlsx scaricato direttamente |
+| Dati | Prezzi mensili ICE Arabica (USD/kg, New York) e Robusta (USD/kg, Londra) |
+| Storico | Dal 1960 |
+| Cache | 1 ora |
 
 ---
 
-### 2.5 ER-API — Exchange Rates API
+### 2.5 yfinance — Tassi di Cambio Storici EURBRL=X
 
-**Cos'è?**
-ER-API (`open.er-api.com`) è un servizio gratuito di tassi di cambio in tempo reale. Fornisce i tassi di cambio correnti rispetto al dollaro USA per ~160 valute.
+La dashboard usa la libreria `yfinance` (Yahoo Finance) per scaricare la **serie storica mensile del cambio EUR/BRL** (ticker `EURBRL=X`), coprendo gli ultimi 12 anni.
 
-**Dati forniti dalla dashboard:**
-- **USD → EUR**: Usato per convertire i prezzi commodity da dollari a euro.
-- **USD → BRL**: Usato per calcolare il tasso BRL/EUR (derivato incrociando USD/EUR e USD/BRL), che impatta il costo delle esportazioni brasiliane.
+**Perché yfinance invece di ER-API per i prezzi storici**: ER-API fornisce solo il tasso di cambio *corrente* (istantaneo). Applicare un singolo tasso fisso a 10 anni di prezzi storici invalida qualsiasi analisi comparativa, perché la serie `arabica_brl_kg` diventerebbe un multiplo costante di `arabica_eur_kg` — le due linee normalizzate si sovrapporrebbero perfettamente e lo Z-score avrebbe deviazione standard zero (barre NaN). yfinance restituisce invece la serie mensile storica effettiva, che viene unita alla serie prezzi tramite `pd.merge_asof` con tolleranza di 45 giorni.
 
-**Perché il BRL/EUR è importante:**
-Quando il Real brasiliano si deprezza rispetto all'Euro (il tasso BRL/EUR sale, cioè ci vogliono più Real per comprare un Euro), i produttori brasiliani ricevono più Real per ogni sacco di caffè venduto all'estero. Questo **incentiva le esportazioni** e può comprimere le scorte disponibili, esercitando pressione al rialzo sui prezzi internazionali.
+```python
+yf.download("EURBRL=X", period="12y", interval="1mo", auto_adjust=True)
+```
 
 ---
 
 ### 2.6 USDA PSD — Production, Supply and Distribution
 
-**Chi è USDA FAS?**
-Il Foreign Agricultural Service del Dipartimento dell'Agricoltura degli Stati Uniti pubblica la banca dati PSD (Production, Supply and Distribution), che è il dataset di riferimento globale per le previsioni e i consuntivi di produzione agricola mondiale. I dati vengono compilati attraverso una rete di attaché agricoli nei vari paesi e aggiornati mensilmente.
-
-**Cosa contiene per il caffè brasiliano:**
-| Attributo | Descrizione | Unità |
-|-----------|-------------|-------|
-| Production | Produzione totale del marketing year | 1000 Metric Ton |
-| Exports | Volume esportato | 1000 MT |
-| Ending Stocks | Scorte di fine anno | 1000 MT |
-| Beginning Stocks | Scorte di inizio anno | 1000 MT |
-| Domestic Consumption | Consumo interno brasiliano | 1000 MT |
-
-**Marketing Year per il caffè brasiliano**: Aprile-Marzo (il raccolto principale in Brasile avviene tra Maggio e Settembre).
-
-**Come accediamo:**
-- **Endpoint base**: `https://api.fas.usda.gov/api/psd`
-- **Autenticazione**: Header `X-Api-Key` con chiave personale. Chiave di test disponibile, ma per uso production è necessaria registrazione gratuita su `fas.usda.gov`.
-- **Pattern di fetch**: La dashboard scarica i dati anno per anno (`/commodity/{code}/country/{country}/year/{year}`), poi li pivota per ottenere un dataframe storico.
-- **Commodity code**: `0711100` = Coffee, Green (caffè verde, non torrefatto).
-- **Country code**: `BR` = Brasile.
-
-**Conversione unità:**
-USDA usa "1000 Metric Ton". La dashboard converte in sacchi da 60 kg:
-- 1 MT = 16.667 sacchi da 60 kg
-- I valori USDA sono in 1000 MT → moltiplicare per 1000 × 16.667
+| Parametro | Dettaglio |
+|-----------|-----------|
+| Endpoint | `https://api.fas.usda.gov/api/psd/commodity/0711100/country/BR/year/{anno}` |
+| Commodity | `0711100` = Coffee, Green |
+| Paese | `BR` = Brasile |
+| Autenticazione | Header `X-Api-Key` |
+| Unità originale | 1.000 Metric Ton → conversione: × 1000 × 16,667 sacchi 60 kg |
+| Marketing Year | Aprile–Marzo |
 
 ---
 
-### 2.7 FAOSTAT — Food and Agriculture Organization Statistics
+### 2.7 FAOSTAT — Dataset QCL
 
-**Chi è la FAO?**
-La FAO (Food and Agriculture Organization) è l'agenzia dell'ONU per l'alimentazione e l'agricoltura. FAOSTAT è la sua banca dati statistica, considerata la fonte più autorevole per i dati agricoli storici a livello globale. Copre oltre 200 paesi e risale al 1961.
-
-**Cosa forniamo:**
-Dal dataset **QCL (Crops and Livestock Products)**, item 656 (Coffee, green), paese 21 (Brasile):
-| Elemento | Codice | Descrizione |
-|----------|--------|-------------|
-| Area harvested | 2312 | Superficie raccoltata in ettari |
-| Production | 2510 | Produzione in tonnellate |
-| Yield | 2413 | Resa in hg/ha (ettogrammi per ettaro) |
-
-**Perché è prezioso:**
-FAOSTAT offre dati dal **1990 ad oggi**, permettendo di vedere i cicli pluridecennali della produzione brasiliana: l'espansione delle aree coltivate, il miglioramento della resa per ettaro grazie alle tecnologie agricole, e i cicli biennali di produzione (anno on/off).
-
-**Come accediamo:**
-- **Metodo**: Libreria Python `faostat` (installabile via pip). Non si chiama un endpoint REST direttamente ma si usa la libreria che gestisce l'autenticazione e il parsing.
-- **Autenticazione**: Credenziali FAOSTAT (username/password) impostabili via variabili d'ambiente `FAOSTAT_USERNAME` e `FAOSTAT_PASSWORD`.
-- **Parametri chiave**:
-  - `area`: `'21'` (Brasil)
-  - `item`: `'656'` (Coffee, green)
-  - `element`: stringa separata da virgole (es. `'2312,2413,2510'`)
+| Parametro | Dettaglio |
+|-----------|-----------|
+| Dataset | QCL (Crops and Livestock Products) |
+| Area | `21` (Brasile) |
+| Item | `656` (Coffee, green) |
+| Elementi estratti | `2312` Area harvested (ha), `2413` Yield (hg/ha), `2510` Production (t) |
+| Accesso | Libreria Python `faostat` con credenziali via variabili d'ambiente |
+| Storico | Dal 1990 ad oggi, aggiornamento annuale (ritardo ~1-2 anni) |
 
 ---
 
-### 2.8 CONAB — Companhia Nacional de Abastecimento
+### 2.8 CONAB — Excel pre-scaricato
 
-**Chi è CONAB?**
-CONAB è l'ente governativo brasiliano responsabile del monitoraggio e delle previsioni della produzione agricola in Brasile. Pubblica i "Levantamentos de Café" (rilevamenti del caffè), rapporti periodici (solitamente 5-6 all'anno) con dati aggiornati su produzione, resa e area raccolta per ogni stato brasiliano.
-
-**Cosa contiene:**
-- Produzione per stato (MG, ES, SP, BA, RO, PR, GO, MT, ecc.) in sacchi da 60 kg
-- Superficie raccoltata in ettari
-- Resa in sacchi/ettaro
-- Confronto con stagione precedente
-
-**Come accediamo:**
-CONAB non ha un'API ufficiale. I dati sono disponibili in file Excel scaricabili dalla pagina web `gov.br/conab/pt-br/atuacao/informacoes-agropecuarias/safras/safra-de-cafe`.
-
-La dashboard include uno script separato (`fetch_conab.py`) che:
-1. Accede alla pagina web e trova il link all'ultimo rapporto tramite BeautifulSoup.
-2. Naviga nella pagina del rapporto e trova il link al file Excel.
-3. Scarica il file Excel e lo analizza cercando le colonne di interesse (`(d)` per la resa, `(f)` per la produzione).
-4. Salva i risultati come CSV in `data_sources/conab/conab_data.csv`.
-
-Questo script viene eseguito **manualmente o schedulato** (cron job), non ad ogni ricaricamento della dashboard.
-
-**Limitazione**: La struttura del file Excel CONAB cambia occasionalmente tra un rapporto e l'altro. Lo script include logica di ricerca intelligente che identifica le colonne per intestazione (`(d)`, `(f)`) invece che per posizione fissa.
+**Script dedicato**: `fetch_conab.py` scarica e parsa l'ultimo "Levantamento de Café" dal sito `gov.br/conab`.
+**Output**: `data_sources/conab/conab_data.csv` con produzione e resa per stato.
+**Frequenza update CONAB**: 5–6 volte l'anno. Non esiste un'API ufficiale CONAB — il parsing è basato su scraping BeautifulSoup.
 
 ---
 
-### 2.9 GeoJSON IBGE — Confini Geografici degli Stati Brasiliani
+### 2.9 GeoJSON — Confini Stati Brasiliani
 
-**Cos'è:**
-Un file GeoJSON (formato standard per dati geografici vettoriali) che contiene i confini poligonali di tutti gli stati brasiliani. Viene usato per:
-- Sovrapporre i dati di produzione caffè su una mappa coropletica.
-- Identificare a quale stato appartiene ogni focolaio NASA FIRMS tramite join spaziale (GeoPandas `sjoin`).
-
-**Fonte**: Repository pubblico GitHub `click_that_hood`. Il file viene scaricato direttamente e cachato per 1 ora.
+**Fonte**: GitHub `click_that_hood`. Usato da GeoPandas per join spaziale focolai NASA → stati brasiliani, e per le mappe coropletiche Matplotlib.
 
 ---
 
 ## PARTE 3 — I GRAFICI: GUIDA COMPLETA TAB PER TAB
 
-### Scheda 1: 🌦️ Clima & ENSO
+---
 
-#### Grafico 1.1 — Linea ONI con aree di fase (Ultimi 36 mesi)
-**Tipo**: Linea temporale con aree colorate.
-**Cosa mostra**: L'andamento mensile dell'indice ONI negli ultimi 3 anni.
-- Area rossa: mesi in cui ONI > +0.5 (fase El Niño).
-- Area blu: mesi in cui ONI < -0.5 (fase La Niña).
-- Linea nera: valore ONI mensile.
-- Linee tratteggiate: soglie +0.5 e -0.5.
+## 🌦️ SCHEDA 1: CLIMA & ENSO
 
-**Come leggerlo**: Un periodo prolungato nell'area rossa indica rischio siccità per le zone produttrici di caffè nel Centro-Ovest e in Amazzonia. Più il valore ONI è alto, più l'impatto è severo.
+### 3.1 — Pannello KPI: ONI, SOI, Fase ENSO, Impatto Agronomico
 
-#### Grafico 1.2 — Grafico a barre SOI (Ultimi 36 mesi)
-**Tipo**: Istogramma bicolore.
-**Cosa mostra**: Il valore mensile del SOI.
-- Barre blu: mesi con SOI positivo (La Niña atmosferica).
-- Barre rosse: mesi con SOI negativo (El Niño atmosferico).
-- Linee tratteggiate: soglie +7 e -7.
+Il pannello superiore mostra quattro metriche istantanee:
 
-**Come leggerlo**: Quando sia ONI che SOI superano le rispettive soglie nella stessa direzione, l'evento ENSO è "accoppiato" e gli impatti agricoli sono certi e forti. Se divergono, l'evento è debole o in dissolvenza.
+| KPI | Descrizione |
+|-----|-------------|
+| **ONI (°C)** | Ultimo valore mensile dell'indice oceanico, con delta rispetto al mese precedente. |
+| **SOI** | Ultimo valore dell'indice atmosferico, con delta. |
+| **Fase ENSO** | 🔴 El Niño / 🔵 La Niña / 🟢 Neutrale + flag ⚠️ se evento accoppiato. |
+| **Impatto Agronomico** | Testo descrittivo del rischio atteso per le colture brasiliane. |
 
-#### Grafico 1.3 — Heatmap ONI 10 anni (Mese × Anno)
+**Logica di classificazione** (soglie WMO standard):
+- ONI ≥ +0.5°C → **El Niño**
+- ONI ≤ −0.5°C → **La Niña**
+- SOI ≤ −7 con ONI ≥ +0.5 → ⚠️ **evento El Niño accoppiato** — impatto severo quasi certo
+
+---
+
+### 3.2 — Grafico: Indice ONI con Aree di Fase (Ultimi 36 Mesi) ⭐
+
+**Tipo**: Linea temporale con aree fillate.
+
+**Cosa contiene**:
+- Linea nera: valore ONI mensile
+- Area rossa: mesi con ONI > +0.5 (El Niño attivo)
+- Area blu: mesi con ONI < −0.5 (La Niña attiva)
+- Linee tratteggiate: soglie +0.5 e −0.5
+
+**Cos'è l'ONI e perché è fondamentale per il caffè**:
+
+L'Oceanic Niño Index misura l'**anomalia termica della superficie marina** (SST, Sea Surface Temperature) nella regione Niño 3.4 del Pacifico Equatoriale Centrale (5°N–5°S, 170°W–120°W), calcolata come media mobile trimestrale rispetto alla baseline 1991–2020.
+
+Il Pacifico Equatoriale funge da **pompa di calore** che guida i sistemi di circolazione atmosferica globale (circolazione di Walker). Quando la SST sale (El Niño), il motore della circolazione rallenta: le masse d'aria umida che normalmente salgono sull'Amazzonia perdono forza, causando siccità nel Centro-Ovest e Nord del Brasile. Quando la SST scende (La Niña), il motore si accelera: eccesso di piogge in Amazzonia, siccità nel Sud.
+
+**Perché è un indicatore anticipatorio**: L'ONI viene misurato mesi prima che l'effetto si manifesti sul raccolto. Un El Niño dichiarato a Giugno significa siccità durante la fioritura del caffè (Settembre–Novembre) con certezza statistica elevata — il mercato spesso non prezza ancora completamente questo rischio. I buyer che monitorano l'ONI possono anticipare coperture o bloccare forniture prima che i prezzi reagiscano.
+
+---
+
+### 3.3 — Grafico: Indice SOI (Ultimi 36 Mesi) ⭐
+
+**Tipo**: Istogramma bicolore mensile.
+
+**Cosa contiene**:
+- Barre blu: SOI positivo (pressione alta a Tahiti → venti alisei forti → La Niña)
+- Barre rosse: SOI negativo (pressione bassa a Tahiti → El Niño)
+- Soglie: +7 (La Niña confermata) e −7 (El Niño confermato)
+
+**Cos'è il SOI e in cosa si differenzia dall'ONI**:
+
+Il Southern Oscillation Index misura la **differenza di pressione atmosferica standardizzata** tra Tahiti e Darwin, Australia. È la componente *atmosferica* dell'ENSO, mentre l'ONI è quella *oceanica*.
+
+L'importanza di avere entrambi: oceano e atmosfera non sempre si sincronizzano immediatamente. L'ONI può essere oltre +0.5°C (mare caldo → El Niño potenziale) mentre il SOI è ancora vicino allo zero (l'atmosfera non ha ancora "reagito"). In questo caso l'evento è debole o in sviluppo. Quando invece ONI e SOI concordano entrambi oltre le rispettive soglie — el oceano si scalda *e* l'atmosfera risponde con pressione bassa a Tahiti — l'evento è "accoppiato" ed è responsabile storicamente dei peggiori impatti agricoli in Brasile.
+
+**Regola pratica per la lettura combinata**:
+
+| ONI | SOI | Interpretazione |
+|-----|-----|----------------|
+| > +0.5 | < −7 | El Niño accoppiato — siccità Cerrado quasi certa → alta allerta |
+| > +0.5 | tra −7 e 0 | El Niño oceanico in sviluppo — monitorare |
+| < −0.5 | > +7 | La Niña accoppiata — piogge eccessive Sud Brasile → rischio malattie fungine |
+| tra −0.5 e +0.5 | tra −7 e +7 | Fase neutra — nessun impatto ENSO significativo atteso |
+
+---
+
+### 3.4 — Grafico: Heatmap ONI Storica (10 Anni, Mese × Anno)
+
 **Tipo**: Mappa di calore.
-**Cosa mostra**: Il valore ONI per ogni mese (righe, Gennaio-Dicembre) per ogni anno degli ultimi 10 anni (colonne).
-- Rosso intenso: El Niño forte.
-- Blu intenso: La Niña forte.
-- Bianco/grigio: fase neutra.
 
-**Come leggerlo**: Permette di identificare immediatamente gli anni di stress climatico e la loro stagionalità. Un blocco rosso prolungato su più mesi dello stesso anno indica un anno di El Niño significativo.
+**Cosa mostra**: Il valore ONI per ogni mese (righe: Gennaio–Dicembre) per ogni anno degli ultimi 10 (colonne). Scala divergente: rosso intenso = El Niño forte, blu intenso = La Niña forte, bianco = neutro.
 
-#### Grafico 1.4 — Anomalia di Temperatura (Area Riempita)
-**Tipo**: Area chart bicolore.
-**Cosa mostra**: L'anomalia di temperatura superficiale nella cintura del caffè brasiliano rispetto alla baseline 1980-2010.
-- Area rossa: mesi con temperatura sopra la media.
-- Area blu: mesi con temperatura sotto la media.
-
-**Come leggerlo**: Le anomalie positive durante la fase di fioritura del caffè (Settembre-Novembre) o di maturazione (Febbraio-Aprile) aumentano lo stress idrico della pianta e possono ridurre la qualità e la resa del raccolto.
+**Perché è utile**: Permette di identificare immediatamente **durata e stagionalità** degli eventi ENSO. Un blocco rosso esteso da Giugno a Dicembre dello stesso anno è molto più preoccupante di un valore rosso isolato. I blocchi blu prolungati su Ottobre–Novembre indicano La Niña durante la fioritura — storicamente associata a siccità nel Cerrado e Minas Gerais.
 
 ---
 
-### Scheda 2: 🔥 Incendi
+## 🔥 SCHEDA 2: INCENDI
 
-#### Grafico 2.1 & 2.2 — Mappe Arabica e Robusta con Incendi NASA (Matplotlib)
-**Tipo**: Mappa geografica statica con layer multipli.
-**Cosa mostra (mappa sinistra)**: Produzione di Arabica per stato (gradiente verde, più scuro = più produzione) + focolai NASA degli ultimi 5 giorni.
-**Cosa mostra (mappa destra)**: Stessa struttura per la Robusta (gradiente viola).
-**Focolari piccoli** (FRP ≤ 50 MW): Punti grigi semitrasparenti — fuochi minori, rumore di fondo.
-**Focolari grandi** (FRP > 50 MW): Punti colorati scala `hot` (rosso → giallo), dimensionati per intensità.
+### 3.5 — Mappa: Arabica & Robusta con Focolai NASA (Matplotlib)
 
-**Come leggerlo**: La sovrapposizione tra focolai intensi (punti rosso/arancio) e aree ad alta produzione (colori intensi) indica un rischio diretto per il raccolto in corso o per quello della stagione successiva. Lo stato di Minas Gerais (MG, verde intenso) è il principale produttore di Arabica — ogni incendio lì ha impatto significativo sul mercato.
+**Tipo**: Doppia mappa coropletica + scatter geografico su mappa statica.
 
-#### Grafico 2.3 — Serie Temporale Conteggi Mensili Incendi (Ultimi 24 mesi)
-**Tipo**: Linea con marcatori.
-**Cosa mostra**: Il numero di focolai rilevati mensilmente negli ultimi 2 anni.
-**Come leggerlo**: I picchi si verificano tipicamente tra Agosto e Ottobre (stagione secca del Cerrado). Un picco anomalo fuori stagione può segnalare eventi straordinari. Confrontare con il grafico ONI per verificare la correlazione con siccità da La Niña.
+**Mappa sinistra (Arabica)**:
+- Colorazione stati: gradiente verde proporzionale alla produzione Arabica (sacchi/60kg, dati COFFEE_STATE_PROD).
+- Punti **grigi** (FRP ≤ 50 MW): incendi minori — fuochi agricoli controllati, sterpaglie. Rumore di fondo.
+- Punti **colorati scala `hot`** (FRP > 50 MW): incendi significativi, dimensionati ∝ √FRP × 3.
 
-#### Grafico 2.4 — Barre Focolai per Macro-Regione
-**Tipo**: Grafico a barre orizzontale.
-**Cosa mostra**: La distribuzione geografica degli incendi per macro-regione (Nord, Nord-Est, Centro-Ovest, Sud-Est, Sud).
-**Come leggerlo**: Il Centro-Ovest (Cerrado) e il Nord (Amazzonia) dominano tipicamente. Se il Sud-Est sale in modo anomalo, significa che regioni produttrici come Minas Gerais o Espírito Santo sono direttamente coinvolte.
+**Mappa destra (Robusta)**: Identica logica, gradiente viola per la produzione Robusta.
+
+**Perché FRP e non solo conteggio focolai**: Il *Fire Radiative Power* (potenza radiativa, in Megawatt) è molto più informativa del semplice conteggio. Un fuoco agricolo controllato vale 5 MW; un incendio foresta-savana può superare 500 MW. Il FRP è proporzionale alla massa vegetale bruciata e quindi al danno potenziale sulle colture limitrofe e al particolato emesso.
+
+**Come leggere la sovrapposizione**: Un punto rosso/arancio (FRP alto) su area verde intensa (alta produzione Arabica) — tipicamente nel sud di Minas Gerais — è il segnale di massima allerta. Anche senza che il fuoco raggiunga direttamente le piante, il particolato riduce la fotosintesi per settimane e altera il microclima locale, riducendo la qualità del chicco nella cernita definitiva.
 
 ---
 
-### Scheda 3: ⚓ Navi & Porti
+### 3.6 — Grafico: Conteggio Mensile Incendi (Ultimi 24 Mesi)
 
-#### Sezione 3.1 — Pannello Diagnostico AIS
-**Cos'è**: Un pannello tecnico che mostra le metriche della connessione WebSocket AIS.
-**Metriche**:
-- **Messaggi Ricevuti**: Totale messaggi raw dal WebSocket.
-- **Position Reports**: Messaggi di posizione nave.
-- **Static Data Msgs**: Messaggi con dati statici (tipo nave, nome).
-- **In Bbox**: Position report che ricadono nelle bounding box monitorate.
-- **Finale Tracciato**: Navi effettivamente registrate dopo il filtro tipo cargo.
+**Tipo**: Linea con marcatori, colore rosso.
 
-**Come leggerlo**: Se "Messaggi Ricevuti" è 0, la connessione è stabilita ma non arriva traffico (tipicamente per i porti brasiliani con il tier gratuito). Se "In Bbox" è 0 ma ci sono messaggi, le bounding box potrebbero essere troppo strette o non c'è traffico nella zona in quel momento.
-
-#### Sezione 3.2 — Demo Live Porti Globali
-**Cosa mostra**: Navi cargo (codici AIS 70-89) nei porti di Singapore, Rotterdam e Los Angeles, divise per "In Transito" (SOG > 1 nodo) e "All'Ancora/Ormeggiate" (SOG < 1 nodo o stato navigazionale 1/5).
-**Perché globale e non brasiliana**: Come spiegato nella sezione API, il tier gratuito AIS non copre i porti brasiliani con sufficiente densità di segnale. Questa sezione dimostra la **capacità tecnologica** del sistema: con un feed AIS premium, lo stesso codice funzionerebbe in tempo reale sui porti di Santos, Vitória, ecc.
-
-#### Grafico 3.3 — Tendenze Ritardi Brasiliani (Ultimi 12 mesi)
-**Tipo**: Grafico a linee multi-serie.
-**Cosa mostra**: L'andamento stimato del ritardo medio in giorni per ciascuno dei 5 porti brasiliani, basato su un modello che incorpora stress climatici (deficit pluviometrico, incendi) e dati storici di throughput.
-**Come leggerlo**: Un ritardo elevato a Santos coincide spesso con periodi di alta siccità che rallentano i trasporti terrestri verso il porto, o con picchi stagionali di export (Luglio-Settembre).
-
-#### Grafico 3.4 — Mappa Rischio Porti
-**Tipo**: Scatter map su mappa interattiva.
-**Cosa mostra**: I 5 porti brasiliani, dimensionati per ritardo stimato e colorati per livello di rischio (verde=basso, arancio=medio, rosso=alto).
-**Come leggerlo**: Passare il mouse su ogni punto per vedere i valori esatti. Un porto in rosso con alto ritardo è il segnale per anticipare forniture o diversificare i percorsi di spedizione.
+**Come leggerlo**: I picchi si verificano fisiologicamente tra **Agosto e Ottobre** (stagione secca del Cerrado). Un picco anomalo fuori da questa finestra è un segnale di allarme — siccità atipica o cambio nelle pratiche di disboscamento. Confrontare con l'ONI: anni di El Niño mostrano picchi sehr molto superiori alla media già da Giugno–Luglio.
 
 ---
 
-### Scheda 4: 📈 Prezzi di Mercato
+### 3.7 — Grafico: Focolai per Macro-Regione
 
-#### Grafico 4.1 — Prezzi Arabica e Robusta (10 anni, EUR/kg)
-**Tipo**: Doppio asse Y con due linee.
-**Cosa mostra**: L'andamento storico dei prezzi mensili di Arabica (asse sinistro) e Robusta (asse destro) in EUR/kg.
-**Come leggerlo**: Osservare la divergenza tra le due curve nel tempo. In periodi di stress climatico in Brasile, l'Arabica tende a salire più della Robusta, ampliando il differenziale.
+**Tipo**: Barre verticali per macro-regione geografica.
 
-#### Grafico 4.2 — Differenziale Arabica-Robusta con Media Mobile 3 mesi
-**Tipo**: Barre + linea.
-**Cosa mostra**: La differenza di prezzo Arabica − Robusta per ogni mese. La linea rossa è la media mobile su 3 mesi.
-**Come leggerlo**: Un differenziale in crescita indica che il mercato sta pagando un premio crescente per la qualità Arabica — segnale di scarsità relativa o di percezione di qualità superiore. Un differenziale in calo può indicare che il mercato accetta Robusta come sostituto, o che l'offerta di Arabica è abbondante.
-
-#### Grafico 4.3 — Heatmap Variazione % MoM Arabica (Mese × Anno)
-**Tipo**: Mappa di calore.
-**Cosa mostra**: La variazione percentuale mese su mese del prezzo Arabica, organizzata per mese (righe) e anno (colonne).
-- Verde: mese con prezzo salito rispetto al mese precedente.
-- Rosso: mese con prezzo sceso.
-**Come leggerlo**: Permette di identificare la **stagionalità dei prezzi**. Se certi mesi sono sistematicamente verdi (es. Luglio-Agosto), indica che storicamente i prezzi salgono in quel periodo — tipicamente a causa del picco di export post-raccolto che riduce le scorte.
-
-#### Grafico 4.4 — Influenza Macro FX: BRL/EUR vs Prezzo Arabica
-**Tipo**: Doppio asse con area riempita (BRL/EUR) e linea (Arabica).
-**Cosa mostra**: La correlazione visiva tra il tasso di cambio BRL/EUR e il prezzo in euro dell'Arabica.
-**Come leggerlo**: Quando il BRL si deprezza (linea BRL/EUR sale), i produttori brasiliani ricevono più Real per lo stesso dollaro, incentivando le esportazioni e potenzialmente spingendo i prezzi internazionali verso l'alto.
-
-#### Grafico 4.5 — Prezzo Medio Annuale Arabica vs Media 10 anni
-**Tipo**: Barre + linea tratteggiata.
-**Cosa mostra**: Il prezzo medio annuale dell'Arabica in EUR/kg per ogni anno, con la media decennale come riferimento.
-**Come leggerlo**: Gli anni significativamente sopra la media sono stati tipicamente associati a eventi estremi: la gelata brasiliana del 2021, la siccità del 2010-11, ecc. Vedere in quale contesto climatico (scheda ENSO, Incendi) si trovavano quegli anni aiuta a costruire la narrativa causale.
+**Come leggerlo**: Il Centro-Ovest (Cerrado) e il Nord (Amazzonia) dominano strutturalmente per volume. Se il **Sud-Est** (Minas Gerais, Espírito Santo) mostra un incremento anomalo, le aree core dell'Arabica brasiliana sono direttamente sotto pressione — segnale di mercato di massima rilevanza per i buyer.
 
 ---
 
-### Scheda 5: 🌾 Produttività delle Colture
+## ⚓ SCHEDA 3: NAVI & PORTI
 
-#### Grafico 5.1 — FAOSTAT: Produzione e Area Raccolta (1990–Presente)
-**Tipo**: Doppio asse — barre (produzione) + linea (area).
-**Cosa mostra**: La produzione brasiliana di caffè in tonnellate (barre, asse sinistro) e l'area raccoltata in ettari (linea, asse destro) dal 1990 ad oggi.
-**Fonte dati**: FAOSTAT QCL dataset, aggiornato annualmente con un ritardo di 1-2 anni.
-**Come leggerlo**: L'aumento dell'area coltivata mostra l'espansione geografica delle piantagioni. L'aumento della produzione proporzionalmente maggiore rispetto all'area indica **guadagni di efficienza (resa per ettaro)**. I cali biennali sono chiaramente visibili: anno on (alta produzione) e anno off (produzione ridotta).
+### 3.8 — Pannello: Diagnostica AIS Live (6 KPI)
 
-#### Grafico 5.2 — Produzione Totale Arabica + Robusta per Anno (USDA PSD)
-**Tipo**: Barre impilate.
-**Cosa mostra**: Il volume totale in sacchi da 60 kg per anno, distinto per varietà.
-**Fonte dati**: USDA PSD (dati live) o modello simulato.
-**Come leggerlo**: Il ciclo biennale è evidente. La quota Robusta (arancione) è cresciuta negli ultimi anni grazie alla sua maggiore resistenza alla siccità, alla riduzione dei costi di produzione e all'aumento della domanda per espresso e miscele.
+| KPI | Significato |
+|-----|-------------|
+| Stato WS | Connesso/Simulato/Fallito |
+| Messaggi Ricevuti | Totale messaggi raw dal WebSocket nella finestra di ascolto |
+| Report Posizione | Messaggi PositionReport ricevuti |
+| Msg Dati Statici | Messaggi ShipStaticData (tipo nave, nome) |
+| Nel Bbox (grezzo) | Position report che ricadono nelle bounding box monitorate |
+| Tracciati Finali | Navi registrate dopo filtro tipo cargo (AIS 70–89) |
 
-#### Grafico 5.3 — Export Totali vs Scorte Finali (Doppio Asse)
-**Tipo**: Linea + linea tratteggiata su doppio asse.
-**Cosa mostra**: L'export annuale totale (asse sinistro) e le scorte di fine anno (asse destro).
-**Come leggerlo**: Quando le esportazioni crescono mentre le scorte calano, si crea una situazione di **tightening dell'offerta** — condizione che tipicamente precede un rialzo dei prezzi. Quando entrambe salgono, la produzione è abbondante.
-
-#### Grafico 5.4 — Scatter Resa vs Produzione per Stato (CONAB)
-**Tipo**: Scatter/bubble chart.
-**Cosa mostra**: Ogni bolla è uno stato brasiliano. Asse X = resa (sacchi/ettaro). Asse Y = produzione totale. Dimensione della bolla proporzionale alla produzione.
-**Come leggerlo**: Gli stati nell'angolo in alto a destra (alta produzione, alta resa) sono i campioni di efficienza. Minas Gerais domina per volume. Espírito Santo si distingue per alta resa di Robusta (Conilon) pur con volumi minori.
-
-#### Grafico 5.5 — Quota di Mercato Arabica/Robusta (Donut, Anno Più Recente)
-**Tipo**: Grafico a ciambella.
-**Cosa mostra**: La percentuale di produzione Arabica vs Robusta nell'anno più recente.
-**Come leggerlo**: Il Brasile è storicamente 70-75% Arabica. Un trend verso la parità indicherebbe un cambiamento strutturale nel profilo produttivo del paese, con implicazioni importanti per le miscele e per la disponibilità di materia prima di qualità.
+**Nota**: Il tier gratuito AISStream non ha copertura affidabile nei porti brasiliani. La demo live usa Singapore, Rotterdam e Los Angeles. Con feed AIS premium, lo stesso codice funzionerebbe su Santos e Vitória.
 
 ---
 
-### Scheda 6: 🌧️ Precipitazioni
+### 3.9 — Grafico: Tendenze Ritardo Porto — Ultimi 12 Mesi
 
-#### Grafico 6.1 — Deficit Pluviometrico Mensile con Media Mobile (Ultimi 24 mesi)
-**Tipo**: Barre colorate + linea media mobile.
-**Cosa mostra**: Il deficit pluviometrico percentuale per ogni mese (quanto le precipitazioni sono sotto la norma). Colorazione: verde < 10%, arancio 10-20%, rosso > 20%. La linea nera è la media mobile a 12 mesi.
-**Come leggerlo**: Un deficit prolungato oltre il 15-20% nelle regioni di Minas Gerais e Cerrado durante la stagione di fioritura (Settembre-Novembre) è il principale indicatore di stress agronomico per l'Arabica. Confrontare con il grafico ONI per la verifica causale.
+**Tipo**: Grafico a linee multi-serie (una linea per porto).
 
-#### Grafico 6.2 — Deficit Pluviometrico per Stato (Orizzontale)
-**Tipo**: Barre orizzontali con gradiente colore.
-**Cosa mostra**: Il deficit medio annuo per ogni stato produttore brasiliano.
-**Come leggerlo**: Gli stati con deficit elevato richiedono maggiore dipendenza dall'irrigazione, aumentando i costi di produzione e la vulnerabilità alle stagioni siccitose. Confrontare con la mappa di produzione per identificare le aree a maggiore esposizione al rischio.
-
-#### Grafico 6.3 — Heatmap Stagionale Deficit (Mese × Anno)
-**Tipo**: Mappa di calore.
-**Cosa mostra**: Il valore di deficit pluviometrico per ogni mese (righe) e anno (colonne).
-- Giallo: deficit basso (piogge normali).
-- Arancio/Rosso intenso: deficit elevato (siccità).
-**Come leggerlo**: Il blocco Giugno-Settembre dovrebbe essere sistematicamente più scuro (stagione secca del Cerrado). Se il blocco rosso si estende a Ottobre-Novembre (fioritura) o a Dicembre-Gennaio (sviluppo del frutto), l'impatto produttivo è significativo.
+**Modello di stima**: Il ritardo stimato (giorni) combina deficit pluviometrico (45%), pressione incendi (20%), e throughput storico di base (35%). Un ritardo crescente a Santos — che gestisce ~60% dell'export caffè brasiliano — è il segnale per anticipare forniture o diversificare i percorsi.
 
 ---
 
-## PARTE 4 — DOMANDE FREQUENTI DURANTE LA PRESENTAZIONE
+### 3.10 — Mappa: Rischio Porto Attuale
 
-### Domande di Business
+**Tipo**: Scatter map interattiva (Plotly + Mapbox Carto-Positron).
 
-**D: Quanto sono affidabili questi dati? Posso usarli per decisioni di acquisto?**
-R: I dati provengono da fonti istituzionali di massima autorevolezza (NASA, NOAA, Banca Mondiale, USDA, FAO). Per il monitoraggio climatico e dei prezzi, l'affidabilità è molto alta. I dati di produzione (USDA/FAOSTAT) hanno un ritardo di aggiornamento di qualche mese e sono stime che vengono revisionate. I dati AIS sui porti brasiliani, con il tier gratuito, sono stimati da modello — per dati live affidabili sarebbe necessario un feed premium. La dashboard è uno strumento di **intelligence strategica e monitoraggio**, non di esecuzione operativa in tempo reale.
-
-**D: Perché le navi brasiliane non mostrano dati live?**
-R: Il sistema AIS gratuito non ha copertura sufficiente nei porti brasiliani. La parte live dimostra la capacità tecnologica del sistema (che funziona su Singapore, Rotterdam, Los Angeles). Per portarlo su Santos e Vitória in produzione, è necessario sottoscrivere un feed AIS premium (costo tipico: $500-5000/mese a seconda del volume).
-
-**D: Con quale frequenza si aggiornano i dati?**
-R: Dipende dalla fonte:
-- Prezzi commodity e FX: ogni ora (cache 1h)
-- NASA FIRMS (incendi): ogni 12 ore (aggiornamento satellite)
-- NOAA ENSO: ogni 24 ore (dati mensili)
-- USDA PSD: ogni ora (cache 1h, ma i dati cambiano mensilmente)
-- FAOSTAT: ogni 24 ore (dati annuali)
-- AIS live: on-demand (bottone manuale, ~10 secondi di ascolto)
-
-**D: Cosa significa "Dati Simulati" nella sidebar?**
-R: La dashboard ha due modalità: "Dati API Reali" chiama tutti gli endpoint live; "Dati Simulati" usa dataset generati con numeri pseudorandom a seed fisso, utili per demo offline o sviluppo. In produzione si usa sempre la modalità API Reali.
-
-**D: Possiamo aggiungere altre fonti dati?**
-R: Assolutamente. L'architettura è modulare. Ogni fonte è un blocco `fetch_*()` indipendente con la sua cache e il suo log di salute. Aggiungere nuove fonti (es. prezzi futures ICE diretti, dati meteo orari, report CECAFÉ) richiede solo di aggiungere la relativa funzione e richiamarla nel tab appropriato.
+**Lettura**: Punti dimensionati per ritardo stimato, colorati per rischio (🟢 Basso / 🟠 Medio / 🔴 Alto). Mouse-over per valori esatti.
 
 ---
 
-### Domande Tecniche
+## 📈 SCHEDA 4: PREZZI DI MERCATO
 
-**D: Cos'è un WebSocket e perché lo usiamo per AIS?**
-R: Un WebSocket è una connessione bidirezionale persistente tra il browser/server e un servizio remoto, a differenza delle normali chiamate HTTP che aprono e chiudono la connessione ad ogni richiesta. AIS usa i WebSocket perché i dati arrivano in flusso continuo — la nave trasmette la posizione ogni 2-10 secondi, e il WebSocket consente di ricevere questi aggiornamenti in tempo reale senza polling continuo.
+### 3.11 — KPI: Tasso di Cambio BRL/EUR Attuale
 
-**D: Cosa succede se un'API va giù?**
-R: Ogni fetch function è protetta da `try/except` multiplo (Timeout, HTTPError, ConnectionError, Exception generica). Se una chiamata fallisce, la dashboard:
-1. Registra l'errore nel pannello "Salute delle API" con il messaggio esatto.
-2. Cade automaticamente sul dato simulato per quella specifica fonte.
-3. Mostra gli altri dati normalmente — un'API giù non blocca il resto della dashboard.
+**Tipo**: `st.metric` singolo.
 
-**D: Come funziona il caching?**
-R: La dashboard usa `@st.cache_data` di Streamlit, che salva il risultato di ogni funzione di fetch in memoria. Il parametro `ttl` (Time To Live) definisce per quanti secondi il dato viene considerato valido prima di richiedere un refresh. Questo evita di chiamare le API ad ogni interazione dell'utente.
-
-**D: Cos'è GeoPandas e come viene usato?**
-R: GeoPandas è una libreria Python che estende Pandas aggiungendo supporto per dati geografici. Nella dashboard viene usata per:
-1. Caricare il file GeoJSON dei confini brasiliani come DataFrame spaziale.
-2. Eseguire un "spatial join" (unione spaziale) tra i focolari NASA (punti lat/lon) e gli stati brasiliani (poligoni), per sapere a quale stato appartiene ogni incendio.
-3. Renderizzare la mappa con Matplotlib colorando ogni stato per produzione.
-
-**D: Perché alcuni grafici usano Matplotlib e altri Plotly?**
-R: Plotly è usato per la maggior parte dei grafici perché produce visualizzazioni interattive (hover, zoom, pan) direttamente nel browser. Matplotlib viene usato per le mappe degli incendi perché permette di gestire più layer (coropleth + scatter points) con maggiore controllo sulla renderizzazione, e perché GeoPandas integra nativamente con Matplotlib per i plot geografici.
-
-**D: Cosa sono i "sacchi da 60 kg" e perché sono l'unità di misura standard?**
-R: Il sacco da 60 kg (noto come "bag" nel commercio internazionale) è l'unità di misura standard nel mercato del caffè verde, stabilita storicamente da quando il caffè veniva fisicamente trasportato in sacchi di iuta. Tutti i dati USDA e CONAB sono espressi in migliaia di sacchi da 60 kg. La conversione da Metric Ton a sacchi è: 1 MT = 16.667 sacchi.
-
-**D: Cosa significa "marketing year" per il caffè brasiliano?**
-R: Il marketing year (anno commerciale) per il caffè brasiliano va da **Aprile a Marzo** dell'anno successivo. Questo perché il raccolto principale in Brasile avviene tra Maggio e Settembre, e l'anno commerciale inizia appena prima per catturare l'intera stagione. Tutti i dati USDA usano questa convenzione — il marketing year 2024 copre Aprile 2024-Marzo 2025.
-
-**D: Cosa è il "ciclo biennale" della produzione brasiliana?**
-R: Le piante di caffè Arabica hanno un ciclo naturale di alternanza produttiva: un anno producono abbondantemente (anno "on"), l'anno successivo producono meno perché hanno esaurito le riserve energetiche (anno "off"). Questo fenomeno è visibile chiaramente nei grafici di produzione come oscillazione regolare tra anni dispari e pari. Il Brasile ha lavorato per mitigarlo tramite irrigazione e pratiche agronomiche avanzate, ma il ciclo persiste.
+**Cosa mostra**: Il valore più recente di EUR/BRL dalla serie yfinance — quanti Real brasiliani equivalgono a 1 Euro. È il termometro istantaneo del vantaggio di acquisto per il buyer europeo.
 
 ---
 
-### Domande su ENSO e Clima
+### 3.12 — Grafico: Prezzi Arabica & Robusta in EUR/kg (Storico 10 anni)
 
-**D: El Niño o La Niña — qual è peggio per il caffè brasiliano?**
-R: Entrambi causano problemi, ma di tipo diverso. El Niño porta siccità nel Centro-Ovest e nell'Amazzonia (meno piogge durante la fioritura → rese inferiori). La Niña porta eccesso di piogge nel Sud (che causa malattie fungine nelle piantagioni di Paraná) e siccità nel Nord-Est. Statisticamente, gli anni di El Niño coincidono spesso con picchi di prezzo dell'Arabica perché il Brasile è il maggior produttore mondiale.
+**Tipo**: Doppio asse Y — Arabica (asse sinistro, marrone) + Robusta (asse destro, arancio scuro).
 
-**D: Come si collega il grafico ENSO ai prezzi del caffè?**
-R: La correlazione esiste ma con un ritardo di 6-18 mesi: gli effetti climatici durante la fioritura (Settembre-Novembre) si manifestano sul raccolto nella primavera-estate successiva (Maggio-Settembre), e sui prezzi ancora qualche mese dopo una volta che il mercato prende atto della produzione effettiva. Questo ritardo rende il monitoraggio ENSO anticipatorio rispetto ai mercati.
-
-**D: Perché usate sia ONI che SOI? Non basta uno?**
-R: L'ONI misura la componente oceanica dell'ENSO (la temperatura del mare), mentre il SOI misura la risposta atmosferica. Possono essere temporaneamente discordanti durante le fasi di sviluppo o dissipazione di un evento. Quando sono concordanti (evento "accoppiato"), la previsione degli impatti agricoli è molto più affidabile. Usarli insieme è la pratica standard della climatologia applicata all'agricoltura.
+**Come leggerlo**: Le due serie tendono a muoversi in parallelo ma il **differenziale** tra esse è la metrica chiave per il compratore (analizzata nel grafico successivo). In periodi di stress climatico brasiliano (El Niño, siccità), l'Arabica tende a salire proporzionalmente più della Robusta, ampliando lo spread.
 
 ---
 
-## PARTE 5 — GLOSSARIO TECNICO
+### 3.13 — Grafico: Spread Arabica vs Robusta con Media Mobile a 3 Mesi ⭐
 
-| Termine | Definizione |
-|---------|-------------|
-| **API** | Application Programming Interface — sistema che permette a due software di comunicare. |
-| **AIS** | Automatic Identification System — sistema di tracciamento delle navi commerciali via radio VHF. |
-| **Arabica** | Coffea arabica — varietà di caffè premium, coltivata in altitudine, con 60-70% della produzione mondiale. |
-| **Robusta (Conilon)** | Coffea canephora — varietà più resistente, con maggiore contenuto di caffeina, usata in miscele ed espresso. |
-| **Cache TTL** | Time To Live — periodo di validità di un dato in memoria prima di richiedere un aggiornamento. |
-| **ENSO** | El Niño-Southern Oscillation — fenomeno climatico ciclico del Pacifico che altera le precipitazioni globali. |
-| **FRP** | Fire Radiative Power — misura dell'energia termica emessa da un incendio in Megawatt. |
-| **GeoJSON** | Formato standard per dati geografici vettoriali (punti, linee, poligoni) in formato JSON. |
-| **GeoPandas** | Libreria Python per analisi di dati geografici, estensione di Pandas. |
-| **ICE** | Intercontinental Exchange — borsa commodity dove si negoziano i futures del caffè. |
-| **Marketing Year** | Anno commerciale agricolo, che non coincide con l'anno solare. |
-| **MMSI** | Maritime Mobile Service Identity — identificativo univoco di ogni nave (9 cifre). |
-| **ONI** | Oceanic Niño Index — misura l'anomalia termica del Pacifico Centrale. |
-| **PSD** | Production, Supply and Distribution — database USDA di riferimento per le commodity agricole. |
-| **Pink Sheet** | Nome colloquiale del dataset mensile prezzi commodity della Banca Mondiale. |
-| **QCL** | Crops and Livestock Primary — dataset FAOSTAT per colture e produzione zootecnica. |
-| **Robusta** | Vedi Conilon. |
-| **Sacco 60 kg** | Unità di misura standard internazionale per il caffè verde. |
-| **SOG** | Speed Over Ground — velocità della nave rispetto al fondale in nodi. |
-| **SOI** | Southern Oscillation Index — misura la differenza di pressione atmosferica tra Tahiti e Darwin. |
-| **Streamlit** | Framework Python per creare dashboard web interattive con puro codice Python. |
-| **VIIRS** | Visible Infrared Imaging Radiometer Suite — sensore satellitare NASA per rilevamento termico. |
-| **WebSocket** | Protocollo di comunicazione bidirezionale persistente per dati in streaming. |
+**Tipo**: Barre mensili (differenziale assoluto EUR/kg) + linea rossa (media mobile 3 mesi).
+
+**Cos'è lo spread nel contesto delle materie prime**:
+
+Lo spread (differenziale di prezzo) tra due commodity correlate è una delle metriche più usate nel trading di materie prime perché cattura la *relazione strutturale* tra due prodotti, eliminando il rumore del movimento comune del mercato.
+
+Nel caffè, lo spread Arabica−Robusta misura **quanto il mercato premia la qualità Arabica rispetto alla varietà più economica**:
+
+> Spread(t) = Prezzo_Arabica_EUR/kg(t) − Prezzo_Robusta_EUR/kg(t)
+
+La linea rossa (media mobile 3 mesi) mostra il *momentum* strutturale, livellando la volatilità mensile.
+
+**I 4 scenari interpretativi**:
+
+| Scenario | Segnale | Implicazione per Lavazza |
+|----------|---------|--------------------------|
+| Spread in forte crescita | Il mercato paga un premio crescente per l'Arabica — scarsità o domanda premium | Pressione sui costi; considerare contratti forward o copertura |
+| Spread in forte calo | Arabica abbondante, o mercato accetta Robusta come sostituto | Opportunità di acquisto Arabica a prezzi relativamente convenienti |
+| Spread sopra media storica + El Niño attivo | Scarsità stagionale confermata | Probabile persistenza del differenziale — agire rapidamente |
+| Spread sotto media storica | Abbondanza relativa Arabica | Rivalutare il mix Arabica/Robusta nei blend per ottimizzare i costi |
+
+**Perché la media mobile a 3 mesi**: Il mercato del caffè ha alta volatilità mensile (speculazione, report USDA, gelate occasionali). La media mobile a 3 mesi livella i picchi transitori e mostra il *momentum strutturale*, rilevante per decisioni di acquisto di lungo periodo.
 
 ---
 
-## PARTE 6 — ARCHITETTURA TECNICA IN SINTESI
+### 3.14 — Grafico: Prezzo Arabica BRL/kg vs EUR/kg — Analisi Opportunità d'Acquisto ⭐⭐
+
+**Tipo**: Due subplot sovrapposti con asse X condiviso.
+
+Questo è il grafico più elaborato della dashboard, progettato specificamente per il **buyer europeo** che vuole identificare i momenti più favorevoli all'acquisto.
+
+---
+
+#### Subplot superiore — Prezzi Normalizzati Base 100
+
+Entrambe le serie `arabica_brl_kg` e `arabica_eur_kg` vengono normalizzate a **indice Base 100** dalla prima data disponibile:
+
+```
+BRL_idx(t) = arabica_brl_kg(t) / arabica_brl_kg(t=0) × 100
+EUR_idx(t) = arabica_eur_kg(t) / arabica_eur_kg(t=0) × 100
+```
+
+**Perché normalizzare a Base 100**: Le due serie hanno unità diverse (Real brasiliani e Euro) e scale numeriche diverse. Riportarle entrambe a 100 alla data iniziale le mette sulla **stessa scala di crescita relativa**, permettendo di confrontare non i valori assoluti (inutile confrontarli direttamente) ma il *momentum* di ciascuna — quanto è salita o scesa rispetto al punto di partenza.
+
+**Il riempimento colorato tra le linee**:
+
+Il riempimento è calcolato segmento per segmento (un segmento = un mese):
+
+- 🟢 **Verde** quando `EUR_idx < BRL_idx`: il produttore brasiliano ha visto il suo prezzo in Real crescere *più* velocemente di quanto il prezzo in Euro sia salito per il compratore europeo. Questo è il **vantaggio valutario del buyer europeo**: ogni euro speso compra relativamente più caffè rispetto alla baseline.
+- 🔴 **Rosso** quando `EUR_idx > BRL_idx`: il prezzo in Euro è salito più velocemente di quello in Real — il buyer europeo paga di più in termini relativi.
+
+Il colore verde non significa che i prezzi assoluti siano bassi — significa che il *rapporto di cambio effettivo* è favorevole al compratore europeo in quel momento specifico rispetto alla sua posizione storica.
+
+---
+
+#### Subplot inferiore — Z-Score Rolling 12 Mesi del Cambio BRL/EUR ⭐⭐
+
+**Tipo**: Grafico a barre con colorazione condizionale (🟢 verde se Z > +1σ, ⬜ grigio altrimenti).
+
+**Cos'è lo Z-score**:
+
+Lo Z-score è una misura statistica standardizzata che esprime **di quante deviazioni standard un valore si discosta dalla media corrente**:
+
+> Z(t) = ( FX(t) − Media_12m(t) ) / DevStd_12m(t)
+
+dove tutti i termini sono calcolati su una finestra mobile degli ultimi 12 mesi. Questo rende lo Z-score **adattivo**: confronta ciascun mese non con la media storica totale (che potrebbe essere obsoleta dopo anni di cambio di regime valutario), ma con il suo *recente contesto* degli ultimi 12 mesi.
+
+**Perché "rolling 12 mesi" e non la media storica totale**: Se il BRL si svaluta strutturalmente nel corso di anni, uno Z-score sulla media storica sovrastimarebbe sistematicamente la "forza" dell'euro. La finestra rolling adattiva identifica invece la forza o debolezza *relativa al regime corrente*, che è la misura operativamente significativa per il buyer.
+
+**Come leggere i colori**:
+
+| Colore | Condizione | Significato economico |
+|--------|------------|----------------------|
+| 🟢 **Verde** | Z > +1σ | L'euro è almeno 1 deviazione standard **più forte** rispetto alla sua media recente. Questo accade statisticamente in ~16% dei mesi (circa 2 mesi l'anno). È una finestra **rara e favorevole**: il buyer europeo acquista Real a tassi eccezionalmente convenienti. |
+| ⬜ **Grigio** | −1σ ≤ Z ≤ +1σ | Situazione nella norma. Nessun segnale specifico. |
+| (nessun colore speciale) | Z < −1σ | L'euro è debole: il buyer europeo paga di più in termini relativi — evitare acquisti spot non urgenti. |
+
+**Le tre linee di riferimento**:
+- Linea verde tratteggiata a **+1σ**: soglia di "euro forte" — momento favorevole
+- Linea grigia punteggiata a **0**: media rolling — cambio nella norma
+- Linea rossa tratteggiata a **−1σ**: soglia di "euro debole"
+
+**Il segnale combinato ottimale**: Le finestre in cui *contemporaneamente* il pannello superiore è **verde** (EUR relativa al BRL in vantaggio) E il pannello inferiore ha barre **verdi** (Z > +1σ) sono i momenti storicamente ottimali per acquistare caffè brasiliano in euro — si ha sia il vantaggio del prezzo relativo sia il vantaggio valutario sullo storico recente.
+
+---
+
+### 3.15 — Grafico: Prezzo Medio Annuo Arabica vs Media Decennale
+
+**Tipo**: Barre per anno + linea tratteggiata (media decennale).
+
+**Come leggerlo**: Gli anni con barre significativamente sopra la media sono quasi sempre associati a eventi climatici estremi: gelate brasiliane, siccità El Niño, o shock geopolitici di offerta. Sovrapporre mentalmente questo grafico con la heatmap ONI costruisce la narrativa causale che spiega le variazioni di budget di acquisto.
+
+---
+
+## 🌾 SCHEDA 5: PRODUTTIVITÀ DELLE COLTURE
+
+### 3.16 — Grafico: FAOSTAT — Produzione e Area Raccolta (1990–Presente) ⭐
+
+**Tipo**: Doppio asse — barre marroni (produzione in tonnellate, asse sinistro) + linea verde (superficie raccolta in ettari, asse destro).
+
+**Fonte esatta**: Dataset FAOSTAT QCL — Brasile (area=`21`), Caffè verde (item=`656`), elementi:
+- `2510` → Production (tonnellate) → **barre**
+- `2312` → Area harvested (ettari) → **linea**
+
+**Come leggere le relazioni tra barre e linea**:
+
+- Se le barre crescono **più velocemente** della linea → la resa per ettaro sta aumentando (guadagni di efficienza agronomica).
+- Se le barre e la linea crescono **proporzionalmente** → l'aumento di produzione è interamente dovuto all'espansione dell'area coltivata, non all'intensificazione.
+- Se le barre **calano** mentre la linea è stabile → la resa è diminuita (siccità, malattie, anno off).
+
+**Il ciclo biennale (anni on/off) — spiegazione dettagliata**:
+
+La caratteristica più evidente del grafico è l'oscillazione regolare della produzione tra anni alterni. Questo riflette il **ciclo biologico naturale della pianta Coffea arabica**:
+
+> Un anno di produzione intensa (anno "on") esa le riserve di carboidrati della pianta. Le gemme fiorali già formate durante l'anno on hanno richiesto un investimento energetico enorme. L'anno successivo (anno "off"), la pianta riduce la carica fruttificante spontaneamente per recuperare. L'anno seguente torna all'alta produzione.
+
+Nelle barre del grafico, questo ciclo appare come oscillazione quasi perfetta: anno alto → anno basso → anno alto... La superficie raccolta (linea) non oscilla — è stabile o in crescita lenta — mentre la produzione (barre) oscilla. Ciò conferma che l'oscillazione è biologica (resa per pianta), non strutturale (area coltivata).
+
+**Implicazioni per la pianificazione degli acquisti**:
+
+Il ciclo biennale è *parzialmente prevedibile*. Se l'anno corrente è un "anno on" (produzione alta, prezzi tendenzialmente più bassi), il prossimo sarà probabilmente un "anno off" (produzione più contenuta, pressione rialzista sui prezzi). Questo fornisce una base per la pianificazione degli acquisti a 12–18 mesi di orizzonte.
+
+**Perché la FAO e non solo USDA**: FAOSTAT offre dati **dal 1990 ad oggi** — 30+ anni — permettendo di vedere cambiamenti strutturali decennali (conversione del Cerrado in terra agricola) che i 15-20 anni di USDA non catturano.
+
+---
+
+### 3.17 — Grafico: Produzione Totale Arabica + Robusta per Anno (USDA PSD)
+
+**Tipo**: Barre impilate per anno.
+
+**Come leggerlo**: Il ciclo biennale è evidente come oscillazione delle barre totali. La quota Robusta (arancio) è cresciuta strutturalmente grazie alla sua maggiore resistenza alla siccità, alla meccanizzazione più facile in pianura e alla domanda crescente per miscele espresso. Un trend di crescita della quota Robusta può indicare una pressione futura sulla disponibilità di Arabica di qualità.
+
+---
+
+### 3.18 — Grafico: Volumi Annui Esportazioni vs Scorte Finali ⭐⭐
+
+**Tipo**: Doppia linea su doppio asse Y — Export (verde, asse sinistro) + Ending Stocks (blu tratteggiato, asse destro). Entrambe in sacchi da 60 kg, con notazione abbreviata (.2s).
+
+**Il concetto chiave: lo "squeeze" dell'offerta**
+
+Le due serie raccontano insieme la **storia della disponibilità fisica di caffè brasiliano sul mercato**. Leggere una sola delle due è insufficiente — è la relazione dinamica tra export e scorte che porta il segnale.
+
+**I 4 scenari fondamentali**:
+
+| Scenario | Export | Scorte | Segnale | Azione buyer |
+|----------|--------|--------|---------|-------------|
+| **Squeeze** | ↑ crescono | ↓ calano | Tightening dell'offerta — precursore rialzo prezzi 6-12 mesi | Anticipare acquisti, valutare contratti a termine |
+| **Abbondanza** | ↑ crescono | ↑ crescono | Produzione molto abbondante (anno on), pressione ribassista | Momento favorevole per acquisti spot |
+| **Stress produttivo** | ↓ calano | ↓ calano | Produzione bassa (anno off o siccità) — scorte si erodono anche con meno esportazioni | Monitorare — rischio rialzo anche senza boom export |
+| **Ritenzione** | ↓ calano | ↑ crescono | Il Brasile trattiene il caffè (cambio sfavorevole o domanda interna alta) | Segnale misto — attendere chiarimento |
+
+**Il "crossover" come segnale tecnico**: Il momento in cui la linea delle scorte scende *sotto* la traiettoria delle esportazioni è storicamente uno dei segnali più affidabili di squeeze imminente. I traders di commodity lo chiamano "drawdown da scorte" — ed è quasi invariabilmente seguito da movimenti rialzisti sul futures ICE Arabica di New York entro 3–6 mesi.
+
+---
+
+### 3.19 — Grafico: Efficienza Resa vs Volume Produzione — Top 10 Regioni ⭐
+
+**Tipo**: Bubble scatter chart.
+
+| Dimensione visiva | Dato |
+|-------------------|------|
+| **Asse X** | Resa media (sacchi 60 kg / ettaro) — efficienza agronomica |
+| **Asse Y** | Produzione totale annua (sacchi 60 kg) — volume assoluto |
+| **Dimensione bolla** | Proporzionale alla produzione totale |
+| **Etichetta sulla bolla** | Sigla dello stato (es. "MG") — compatta, leggibile |
+| **Mouse-over** | Nome completo + regione geografica (es. "MG — Minas Gerais (Sud-Est)") |
+
+**La lettura per quadranti**:
+
+```
+Volume Produzione (Y)
+        │
+   Alto │ [Grandi estensivi]  │  [Campioni: MG]
+        │                     │
+        │─────────────────────│──────── Resa (X)
+        │                     │
+  Basso │ [Marginali]         │  [Piccoli intensivi: ES, SP]
+        │
+```
+
+| Quadrante | Tipo stato | Esempio |
+|-----------|------------|---------|
+| Alto-destra | Alta produzione + Alta resa — campioni di efficienza | MG (Arabica), ES (Robusta) |
+| Alto-sinistra | Grandi produttori estensivi — area enorme, poca intensificazione | — |
+| Basso-destra | Piccoli produttori ad alta tecnologia | SP, PR |
+| Basso-sinistra | Zone marginali | GO, MT, BA |
+
+**Lettura per i principali stati**:
+- **MG (Minas Gerais)**: Bolla più grande. Domina per volume assoluto di Arabica. Qualsiasi evento climatico qui impatta il mercato globale.
+- **ES (Espírito Santo)**: Alta resa per Robusta (Conilon) con tecniche intensive. Bolla media ma resa elevata.
+- **RO (Rondônia)**: Alta resa relativa di Robusta in zona amazzonica, volume contenuto.
+- **SP (São Paulo)**: Alta resa, volume medio — piantagioni meccanizzate nel Mogiana e Alta Paulista.
+
+**Perché questa visualizzazione è utile per i buyer**: Gli stati con alta resa e alto volume sono i più competitivi economicamente e resilienti a shock di superficie (pressione della soia, urbanizzazione). Gli stati con bassa resa sono più vulnerabili a pressioni di costo e a shock climatici.
+
+---
+
+### 3.20 — Grafico: Quota di Mercato Arabica / Robusta (Donut)
+
+**Tipo**: Donut chart per l'anno più recente.
+
+**Come leggerlo**: Il Brasile è storicamente 70–75% Arabica. Un trend verso la parità indica un cambiamento strutturale profondo — con implicazioni per la disponibilità futura di Arabica di qualità e per i costi delle miscele. Da leggere in combinazione con il trend pluriennale delle barre impilate (3.17).
+
+---
+
+## 🌧️ SCHEDA 6: PRECIPITAZIONI
+
+### 3.21 — Guida: Cos'è il Deficit Pluviometrico e Come si Calcola ⭐
+
+**Definizione**: Misura di quanto le precipitazioni mensili si discostano **al di sotto** della media storica di riferimento.
+
+**Formula**:
+```
+Deficit (%) = ((Pioggia_media_storica − Pioggia_osservata) / Pioggia_media_storica) × 100
+```
+
+**Esempio pratico**: Se agosto ha storicamente 80 mm medi e quest'anno ne sono caduti 56 mm, il deficit è **30%** → zona rossa.
+
+**Baseline**: Media storica 1981–2010 per le regioni del Cerrado brasiliano (standard WMO per confronti climatici).
+
+**Le tre soglie critiche per la pianta del caffè**:
+
+| Deficit | Colore | Impatto agronomico |
+|---------|--------|--------------------|
+| < 10% | 🟢 Verde | Precipitazioni nella norma. Pianta in condizioni ottimali. Nessun intervento necessario. |
+| 10–20% | 🟠 Arancio | Stress moderato. La pianta attiva meccanismi di risparmio idrico — riduzione turgor, chiusura stomatica. Irrigazione supplementare consigliata. Possibile riduzione dimensionale del frutto (chicco più piccolo). |
+| > 20% | 🔴 Rosso | Stress severo. Rischio di **aborto floreale** (le gemme floreali cadono prima di impollinare). Riduzione della resa stimata 20–40%. Maggiore suscettibilità a malattie fungine (*Cercospora coffeicola*, *Hemileia vastatrix*). Riduzione della qualità del chicco per disidratazione precoce. |
+
+**Calendario critico del caffè in Brasile (Cerrado/Minas Gerais)**:
+
+| Mese | Fase fenologica | Vulnerabilità al deficit |
+|------|----------------|--------------------------|
+| Giu–Set | Stagione secca fisiologica | Deficit 20–35% è **normale e necessario** per sincronizzare la fioritura |
+| Ott–Nov | **Fioritura** | ⚠️ Deficit > 20% in questo periodo = disastro agronomico. La fioritura richiede un "trigger" idrico (prime piogge dopo la siccità) — senza pioggia la fioritura è asincronizzata e ridotta. |
+| Dic–Gen | **Chumbinho** (sviluppo del frutto) | ⚠️ Il chicco si forma in questa fase — deficit riduce direttamente dimensioni e densità del chicco. |
+| Feb–Apr | Maturazione | Deficit qui riduce il peso finale del frutto e la resa alla lavorazione. |
+| Mag–Giu | Raccolta | Meno critico per il raccolto in corso, ma impatta la formazione delle gemme per il prossimo anno. |
+
+---
+
+### 3.22 — Grafico: Deficit Pluviometrico Mensile con Media Mobile (Ultimi 24 Mesi)
+
+**Tipo**: Barre colorate dinamicamente per soglia + linea nera (media mobile 12 mesi).
+
+**Colorazione barre**:
+- 🟢 Verde: deficit < 10% (nella norma)
+- 🟠 Arancio: 10–20% (stress moderato)
+- 🔴 Rosso: > 20% (stress severo)
+
+**Linee tratteggiate di riferimento**: a 10% (soglia stress moderato) e 20% (soglia stress severo).
+
+**Come leggerlo**: Un blocco di barre rosse consecutive in **Ottobre–Novembre** o **Dicembre–Gennaio** è il segnale di massima preoccupazione per il raccolto dell'anno successivo. Confrontare sempre con l'ONI — un El Niño attivo (ONI > +1.0°C) in estate australe porta quasi invariabilmente deficit > 20% nelle regioni del Cerrado in Settembre–Novembre.
+
+---
+
+### 3.23 — Grafico: Deficit Pluviometrico Medio per Stato (Barre Orizzontali)
+
+**Tipo**: Barre orizzontali con gradiente continuo RdYlGn_r (rosso = critico, verde = abbondante).
+
+**Asse Y**: Sigla dello stato — compatta. Mouse-over: nome completo con regione geografica.
+
+**Come leggerlo**: Gli stati con deficit medio > 15% dipendono strutturalmente dall'irrigazione per sostenere le rese. Gli impianti di irrigazione coprono ~30% delle piantagioni Arabica in Minas Gerais, ma scendono < 10% nelle zone Robusta di Rondônia (coltivate in contesto più umido). Un aumento strutturale del deficit medio (visibile su più anni consecutivi) indica un peggioramento delle condizioni climatiche locali e un aumento dei costi di produzione a lungo termine.
+
+---
+
+## PARTE 4 — SISTEMA DI NORMALIZZAZIONE DEI NOMI GEOGRAFICI
+
+La dashboard unifica tre sistemi di denominazione degli stati brasiliani — sigle (MG, ES...), nomi per esteso in varie grafie (Espirito Santo, Espírito Santo), e micro-regioni CONAB (Triângulo, Alto Paranaíba...) — tramite:
+
+- **`REGION_NAME_MASTER`**: Dizionario centralizzato con ~80 voci.
+- **`normalize_region_name()`**: Funzione di lookup che accetta qualsiasi variante e restituisce la label italiana normalizzata.
+
+**Formato target**: `"SIGLA — Nome Completo (Regione Italiana)"`
+
+Esempi di mapping:
+
+| Input (variante) | Output (label normalizzata) |
+|-----------------|----------------------------|
+| `"MG"` | `"MG — Minas Gerais (Sud-Est)"` |
+| `"Espirito Santo"` | `"ES — Espírito Santo (Sud-Est)"` |
+| `"Espírito Santo"` | `"ES — Espírito Santo (Sud-Est)"` |
+| `"Triângulo, Alto Paranaíba e Noroeste"` | `"MG Norte-Ovest — Triângulo/Noroeste"` |
+| `"SUDESTE"` | `"Sud-Est Brasile (MG, ES, SP, RJ)"` |
+| `"Norte"` | `"Nord Brasile (RO, AM, PA...)"` |
+
+**Nei grafici**: L'asse Y mostra sempre la **sigla compatta** (prima del "—") per economia di spazio. Il **tooltip al passaggio del mouse** mostra il nome completo con regione geografica.
+
+---
+
+## PARTE 5 — ARCHITETTURA TECNICA
 
 ```
 app_standalone.py
 │
-├── COSTANTI & CONFIG          Endpoint URL, API key, coordinate, colori
-├── FUNZIONI DI FETCH          Una per ogni fonte dati, con @st.cache_data
-│   ├── fetch_prices()         World Bank + ER-API
-│   ├── fetch_enso_data()      NOAA ONI
+├── COSTANTI & CONFIG          URL endpoint, API key, coordinate, palette colori
+├── NORMALIZZAZIONE            REGION_NAME_MASTER / normalize_region_name()
+├── FUNZIONI DI FETCH          @st.cache_data(ttl) — una per fonte
+│   ├── fetch_prices()         World Bank Excel + yfinance EURBRL=X (merge_asof)
+│   ├── fetch_enso_data()      NOAA ONI (testo, filtro -99.90)
 │   ├── fetch_soi_data()       NOAA SOI
-│   ├── fetch_climate()        Modello interno basato su ONI
-│   ├── fetch_firms_data()     NASA FIRMS
-│   ├── fetch_usda()           USDA PSD (per-year keyed fetch)
+│   ├── fetch_climate()        Modello parametrico (ONI → deficit → incendi)
+│   ├── fetch_firms_data()     NASA FIRMS CSV via API
+│   ├── fetch_usda()           USDA PSD REST per anno, pivot su attributo
 │   ├── fetch_faostat()        FAOSTAT via libreria Python
-│   ├── fetch_conab_states()   File CSV da fetch_conab.py
-│   ├── build_port_history()   Modello interno (stima da clima)
-│   └── _fetch_ais_snapshot()  AISStream.io WebSocket (async)
-├── FUNZIONI DI RENDERING      Una per ogni scheda (tab)
+│   ├── fetch_conab_states()   CSV da fetch_conab.py
+│   ├── build_port_history()   Modello parametrico clima → congestione → ritardo
+│   └── _fetch_ais_snapshot()  AISStream WebSocket async (nest_asyncio)
+├── WILDFIRE MAPS              render_wildfire_maps() — GeoPandas + Matplotlib
+├── FUNZIONI DI RENDERING      Una per ogni scheda
 │   ├── render_tab_1()         Clima & ENSO
-│   ├── render_tab_2()         Incendi (Matplotlib + Plotly)
+│   ├── render_tab_2()         Incendi
 │   ├── render_tab_3()         Navi & Porti
-│   ├── render_tab_4()         Prezzi
-│   ├── render_tab_5()         Produttività
+│   ├── render_tab_4()         Prezzi (spread, BRL/EUR dual-subplot, Z-score)
+│   ├── render_tab_5()         Produttività (FAOSTAT, USDA, CONAB, bubble)
 │   └── render_tab_6()         Precipitazioni
-└── main()                     Orchestrazione: fetch → sidebar → tabs
-
-fetch_conab.py (script separato)
-│
-├── Scraping pagina CONAB       BeautifulSoup + requests
-├── Download file Excel          Link dinamico estratto dalla pagina
-├── Parsing Excel               Ricerca intelligente colonne (d) e (f)
-└── Export CSV                  data_sources/conab/conab_data.csv
+└── main()                     Sidebar → fetch → health panel → tab routing
 ```
+
+**Gestione errori**: Ogni `fetch_*()` è protetta da `try/except` multiplo. In caso di fallimento, la funzione registra l'errore nel pannello "Salute API" e restituisce dati simulati — **un'API giù non blocca mai il resto della dashboard**.
+
+**Caching**: `@st.cache_data(ttl=N_secondi)` memorizza il risultato di ogni fetch in RAM. TTL tipici: 3600s (1h) per prezzi e incendi, 86400s (24h) per ENS e USDA.
 
 ---
 
-*Documento generato per uso interno Lavazza — Dashboard Prototipo AI Origins Intelligence*
-*Versione 4.0 — Aprile 2026*
+## PARTE 6 — GLOSSARIO
+
+| Termine | Definizione |
+|---------|-------------|
+| **API** | Application Programming Interface — sistema di comunicazione tra software. |
+| **AIS** | Automatic Identification System — tracciamento obbligatorio navi commerciali via VHF. |
+| **Arabica** | Coffea arabica — varietà premium, coltivata in altitudine, ~60% produzione mondiale. |
+| **Base 100** | Normalizzazione che porta tutte le serie al valore 100 alla data iniziale per confronti di crescita relativa. |
+| **Cache TTL** | Time To Live — durata di validità di un dato in memoria prima del refresh. |
+| **Conilon** | Nome locale brasiliano per Coffea canephora (Robusta). |
+| **Deficit pluviometrico** | Scostamento percentuale delle precipitazioni al di sotto della media storica. |
+| **ENSO** | El Niño-Southern Oscillation — fenomeno climatico ciclico del Pacifico che altera le precipitazioni globali. |
+| **Ending Stocks** | Scorte di fine anno commerciale — indicatore di disponibilità fisica residua per l'anno successivo. |
+| **FRP** | Fire Radiative Power — potenza energetica irradiata da un incendio in Megawatt. |
+| **ICE** | Intercontinental Exchange — borsa commodity per i futures del caffè. |
+| **Marketing Year** | Anno commerciale agricolo (per il caffè brasiliano: Aprile–Marzo). |
+| **merge_asof** | Funzione pandas per unire due dataframe su una chiave temporale usando la data più vicina. |
+| **MMSI** | Maritime Mobile Service Identity — identificativo unico di ogni nave (9 cifre). |
+| **ONI** | Oceanic Niño Index — anomalia termica superficie marina Pacifico Centrale. |
+| **Pink Sheet** | Nome colloquiale del dataset mensile prezzi commodity della Banca Mondiale. |
+| **PSD** | Production, Supply and Distribution — database USDA di riferimento globale. |
+| **QCL** | Crops and Livestock Products — dataset FAOSTAT per colture. |
+| **Robusta** | Coffea canephora — varietà resistente alla siccità, più caffeina, usata in miscele espresso. |
+| **Sacco 60 kg** | Unità di misura standard internazionale per il caffè verde (1 MT = 16,667 sacchi). |
+| **SOG** | Speed Over Ground — velocità della nave in nodi rispetto al fondale. |
+| **SOI** | Southern Oscillation Index — differenza standardizzata di pressione atmosferica Tahiti–Darwin. |
+| **Spread** | Differenziale di prezzo tra due commodity correlate. Nel caffè: Arabica − Robusta. |
+| **SST** | Sea Surface Temperature — temperatura superficiale del mare. |
+| **VIIRS** | Visible Infrared Imaging Radiometer Suite — sensore termico satellitare NASA. |
+| **WebSocket** | Protocollo di comunicazione bidirezionale persistente per dati in streaming. |
+| **yfinance** | Libreria Python per download di serie storiche da Yahoo Finance. |
+| **Z-score** | Misura statistica: di quante deviazioni standard un valore si discosta dalla media corrente. |
