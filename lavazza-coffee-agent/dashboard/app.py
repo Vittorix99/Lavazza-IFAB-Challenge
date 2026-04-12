@@ -73,10 +73,10 @@ st.markdown("""
 # ---------------------------------------------------------------------------
 
 AREA_LABELS = {
-    "geo": "🌍 Geopolitico",
-    "environment": "🌿 Ambiente",
-    "crops": "🌱 Colture",
-    "prices": "💰 Prezzi",
+    "geo": "Geopolitico",
+    "environment": "Ambiente",
+    "crops": "Colture",
+    "prices": "Prezzi",
 }
 AREA_WEIGHTS = {"geo": 0.25, "environment": 0.30, "crops": 0.30, "prices": 0.15}
 
@@ -94,7 +94,7 @@ def direction_icon(d: str) -> str:
 
 
 def intensity_badge(i: str) -> str:
-    return {"high": "🔴", "medium": "🟡", "low": "🟢"}.get(i, "⚪")
+    return {"high": "[HIGH]", "medium": "[MED]", "low": "[LOW]"}.get(i, "")
 
 
 def _score_from_signals(signals: list[dict]) -> dict[str, float]:
@@ -167,16 +167,16 @@ def _render_freshness_table(data_freshness: dict) -> None:
 # ---------------------------------------------------------------------------
 
 _NODE_LABELS = {
-    "init_node":           "🚀 Inizializzazione",
-    "environment_agent":   "🌿 Agente Ambiente (Haiku)",
-    "prices_agent":        "💰 Agente Prezzi (Haiku)",
-    "crops_agent":         "🌱 Agente Colture (Haiku)",
-    "geo_agent":           "🌍 Agente Geopolitico (Haiku + Qdrant)",
-    "aggregation_node":    "📊 Aggregazione score",
-    "chart_node":          "📈 Preparazione grafici",
-    "rag_node":            "🔍 RAG context (Qdrant)",
-    "report_node":         "✍️ Generazione report (Sonnet)",
-    "save_node":           "💾 Salvataggio su MongoDB",
+    "init_node":           "Inizializzazione",
+    "environment_agent":   "Agente Ambiente (Haiku)",
+    "prices_agent":        "Agente Prezzi (Haiku)",
+    "crops_agent":         "Agente Colture (Haiku)",
+    "geo_agent":           "Agente Geopolitico (Haiku + Qdrant)",
+    "aggregation_node":    "Aggregazione score",
+    "chart_node":          "Preparazione grafici",
+    "rag_node":            "RAG context (Qdrant)",
+    "report_node":         "Generazione report (Sonnet)",
+    "save_node":           "Salvataggio su MongoDB",
 }
 
 
@@ -287,7 +287,7 @@ def _render_daily_report(result: dict) -> None:
 
     if alerts:
         for a in alerts:
-            st.error(f"⚠️ {a}")
+            st.error(a)
 
     col_gauge, col_summary = st.columns([1, 3])
     with col_gauge:
@@ -317,17 +317,17 @@ def _render_daily_report(result: dict) -> None:
     col_c, col_o = st.columns(2)
     with col_c:
         if correlations:
-            st.markdown("#### 🔗 Correlazioni")
+            st.markdown("#### Correlazioni")
             for c in correlations:
                 st.markdown(f"• {c}")
     with col_o:
         if outlook:
-            st.markdown("#### 🔭 Outlook 24-48h")
+            st.markdown("#### Outlook 24-48h")
             st.info(outlook)
 
     st.divider()
 
-    with st.expander("📡 Tutti i segnali", expanded=False):
+    with st.expander("Segnali dettaglio", expanded=False):
         area_sel = st.multiselect(
             "Filtra area",
             options=list(AREA_LABELS.keys()),
@@ -337,10 +337,10 @@ def _render_daily_report(result: dict) -> None:
         )
         _render_signals_detail(signals, area_sel)
 
-    with st.expander("🕐 Data Freshness", expanded=False):
+    with st.expander("Data Freshness", expanded=False):
         _render_freshness_table(data_freshness)
 
-    with st.expander("🔧 Raw JSON", expanded=False):
+    with st.expander("Raw JSON", expanded=False):
         st.json(report_json)
 
 
@@ -366,47 +366,47 @@ def _render_team_section(team_data: dict, team_name: str) -> None:
         col1, col2 = st.columns(2)
         with col1:
             if v := team_data.get("price_outlook"):
-                st.markdown("**📈 Outlook Prezzi**")
+                st.markdown("**Outlook Prezzi**")
                 st.markdown(v)
             if v := team_data.get("hedge_window"):
-                st.info(f"🎯 **Finestra hedging:** {v}")
+                st.info(f"**Finestra hedging:** {v}")
         with col2:
             if v := team_data.get("fx_outlook"):
-                st.markdown("**💱 Outlook FX (EUR/BRL)**")
+                st.markdown("**Outlook FX (EUR/BRL)**")
                 st.markdown(v)
             if v := team_data.get("supply_risk"):
-                st.markdown("**⚠️ Rischio fornitura**")
+                st.markdown("**Rischio fornitura**")
                 st.markdown(v)
         if recs := team_data.get("recommendations", []):
-            st.markdown("**✅ Azioni raccomandate**")
+            st.markdown("**Azioni raccomandate**")
             for r in recs:
                 st.markdown(f"• {r}")
         if v := team_data.get("outlook"):
-            st.info(f"🔭 {v}")
+            st.info(v)
 
     elif team_name == "quality":
         if v := team_data.get("crop_quality_outlook"):
-            st.markdown("**🌾 Qualità raccolto**")
+            st.markdown("**Qualità raccolto**")
             st.markdown(v)
         col1, col2 = st.columns(2)
         with col1:
             if v := team_data.get("regional_analysis"):
-                st.markdown("**🗺️ Analisi regionale**")
+                st.markdown("**Analisi regionale**")
                 st.markdown(v)
         with col2:
             if v := team_data.get("sensory_risk"):
-                st.markdown("**👃 Rischio sensoriale**")
+                st.markdown("**Rischio sensoriale**")
                 st.markdown(v)
         if risks := team_data.get("risk_factors", []):
-            st.markdown("**⚠️ Fattori di rischio qualità**")
+            st.markdown("**Fattori di rischio qualità**")
             for r in risks:
                 st.markdown(f"• {r}")
         if recs := team_data.get("recommendations", []):
-            st.markdown("**✅ Azioni raccomandate**")
+            st.markdown("**Azioni raccomandate**")
             for r in recs:
                 st.markdown(f"• {r}")
         if v := team_data.get("outlook"):
-            st.info(f"🔭 {v}")
+            st.info(v)
 
     elif team_name == "management":
         if v := team_data.get("executive_summary"):
@@ -424,19 +424,19 @@ def _render_team_section(team_data: dict, team_name: str) -> None:
         col1, col2 = st.columns(2)
         with col1:
             if corrs := team_data.get("correlations", []):
-                st.markdown("**🔗 Correlazioni strategiche**")
+                st.markdown("**Correlazioni strategiche**")
                 for c in corrs:
                     st.markdown(f"• {c}")
         with col2:
             if v := team_data.get("business_impact"):
-                st.markdown("**💼 Impatto business**")
+                st.markdown("**Impatto business**")
                 st.warning(v)
         if actions := team_data.get("strategic_actions", []):
-            st.markdown("**🎯 Decisioni strategiche**")
+            st.markdown("**Decisioni strategiche**")
             for a in actions:
                 st.markdown(f"• {a}")
         if v := team_data.get("outlook"):
-            st.info(f"🔭 {v}")
+            st.info(v)
 
 
 def _render_weekly_report(result: dict) -> None:
@@ -447,19 +447,19 @@ def _render_weekly_report(result: dict) -> None:
     data_freshness = result.get("data_freshness", {})
     run_at = result.get("run_at", "")
 
-    st.markdown("### 📈 Report Settimanale — Brasile")
+    st.markdown("### Report Settimanale — Brasile")
     st.caption(f"Periodo terminante: {run_at[:10]} · Score: {final_score:.1f}/100 {risk_emoji(final_score)}")
 
     if alerts:
         for a in alerts:
-            st.error(f"⚠️ {a}")
+            st.error(a)
 
     _render_area_scores(signals)
     st.divider()
 
     # 3 tab per team
     tab_acq, tab_qual, tab_mgmt = st.tabs(
-        ["🛒 Team Acquisti", "🔬 Team Quality", "📋 Management"]
+        ["Team Acquisti", "Team Quality", "Management"]
     )
 
     with tab_acq:
@@ -482,11 +482,50 @@ def _render_weekly_report(result: dict) -> None:
 
     st.divider()
 
-    with st.expander("🕐 Data Freshness", expanded=False):
+    with st.expander("Data Freshness", expanded=False):
         _render_freshness_table(data_freshness)
 
-    with st.expander("🔧 Raw JSON completo", expanded=False):
+    with st.expander("Raw JSON", expanded=False):
         st.json(report_json)
+
+
+# ---------------------------------------------------------------------------
+# RAG debug renderer
+# ---------------------------------------------------------------------------
+
+def _render_rag_debug(question: str, debug: dict, context: str) -> None:
+    """Mostra cosa è stato recuperato dal sistema RAG per una data domanda."""
+    with st.expander(f"RAG context — '{question[:60]}'", expanded=False):
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Sezioni trovate", debug.get("sections_found", 0))
+        col2.metric("Caratteri contesto", debug.get("total_chars", 0))
+
+        ar = debug.get("agent_run")
+        if ar:
+            col3.metric("Ultimo report", f"{ar.get('date','?')} · {ar.get('score',0):.0f}/100")
+        else:
+            col3.metric("Ultimo report", "nessuno")
+
+        st.markdown("**Qdrant (ricerca semantica)**")
+        qdrant_rows = [
+            {"Collection": coll, "Risultato": res}
+            for coll, res in debug.get("qdrant", {}).items()
+        ]
+        if qdrant_rows:
+            st.dataframe(qdrant_rows, hide_index=True, use_container_width=True)
+        else:
+            st.caption("Nessuna query Qdrant (embedding non disponibile).")
+
+        st.markdown("**MongoDB (dati raw)**")
+        mongo_rows = [
+            {"Collection": coll, "Documenti": res}
+            for coll, res in debug.get("mongodb", {}).items()
+        ]
+        if mongo_rows:
+            st.dataframe(mongo_rows, hide_index=True, use_container_width=True)
+
+        with st.expander("Testo contesto completo inviato a Claude", expanded=False):
+            st.text(context)
 
 
 # ---------------------------------------------------------------------------
@@ -504,38 +543,50 @@ def _get_embedding(text: str) -> list[float] | None:
         return None
 
 
-def _build_chat_context(question: str) -> str:
+def _build_chat_context(question: str) -> tuple[str, dict]:
     """
-    Costruisce il contesto RAG per il chatbot:
-    1. Ultimo agent_run da MongoDB (report + score + segnali)
-    2. Ricerca semantica su Qdrant (geo_texts, crops_texts, reports_archive)
-    3. Ultimi documenti raw da MongoDB
+    Costruisce il contesto RAG per il chatbot.
+    Ritorna (context_text, debug_info) dove debug_info descrive cosa è stato trovato.
     """
     from utils.db import get_db
     from utils.qdrant import collection_exists, search
 
     parts: list[str] = []
+    debug: dict = {
+        "agent_run": None,
+        "qdrant": {},
+        "mongodb": {},
+    }
 
     # --- Ultimo run agente ---
     db = get_db()
     last_run = db["agent_runs"].find_one({}, sort=[("saved_at", -1)])
     if last_run:
         rj = last_run.get("report_json", {})
+        run_date = last_run.get('run_at', '')[:10]
+        score = last_run.get('final_score', 0)
         parts.append(
-            f"=== ULTIMO REPORT ({last_run.get('run_at','')[:10]}) ===\n"
-            f"Risk Score: {last_run.get('final_score', 0):.1f}/100\n"
+            f"=== ULTIMO REPORT ({run_date}) ===\n"
+            f"Risk Score: {score:.1f}/100\n"
             f"Headline: {rj.get('headline', '')}\n"
             f"Executive Summary: {rj.get('executive_summary', rj.get('management', {}).get('executive_summary', ''))}\n"
             f"Alerts: {', '.join(last_run.get('alerts', [])) or 'nessuno'}"
         )
+        debug["agent_run"] = {
+            "date": run_date,
+            "score": score,
+            "type": last_run.get("report_type", "?"),
+        }
 
     # --- Ricerca Qdrant ---
     embedding = _get_embedding(question)
     if embedding:
         for collection in ["geo_texts", "crops_texts", "reports_archive"]:
             if not collection_exists(collection):
+                debug["qdrant"][collection] = "collection non trovata"
                 continue
             hits = search(collection=collection, query_vector=embedding, limit=3)
+            debug["qdrant"][collection] = f"{len(hits)} hit"
             if hits:
                 texts = []
                 for h in hits:
@@ -551,37 +602,95 @@ def _build_chat_context(question: str) -> str:
                         f"=== DOCUMENTI RILEVANTI ({collection}) ===\n"
                         + "\n---\n".join(texts)
                     )
+    else:
+        debug["qdrant"]["_embedding"] = "errore generazione embedding"
 
-    # --- Dati raw recenti (senza LLM overhead — solo fields testuali) ---
+    # --- Dati raw recenti MongoDB ---
     for col_name, macroarea in [
         ("raw_prices", "prices"),
         ("raw_crops", "crops"),
         ("raw_environment", "environment"),
     ]:
-        docs = db[col_name].find(
+        docs = list(db[col_name].find(
             {"macroarea": macroarea, "country": "BR"},
-            {"source": 1, "summary_en": 1, "movement_label": 1, "collected_at": 1},
+            {"source": 1, "summary_en": 1, "movement_label": 1,
+             "collected_at": 1, "signals": 1,
+             "total_detections": 1, "coffee_zone_detections": 1,
+             "coffee_zone_ratio": 1, "affected_municipalities": 1},
             sort=[("collected_at", -1)],
             limit=2,
-        )
+        ))
+        debug["mongodb"][col_name] = f"{len(docs)} doc"
         snippets = []
         for doc in docs:
+            src = doc.get("source", "?")
+            lines = []
             if summary := doc.get("summary_en"):
-                snippets.append(f"{doc.get('source','?')}: {summary[:200]}")
+                lines.append(summary[:300])
+            if doc.get("total_detections") is not None:
+                cz = doc.get("coffee_zone_detections", 0)
+                ratio = doc.get("coffee_zone_ratio", 0)
+                munis = doc.get("affected_municipalities", [])
+                lines.append(
+                    f"Fuochi totali: {doc['total_detections']} | "
+                    f"In coffee zones: {cz} ({ratio:.0%}) | "
+                    f"Comuni: {', '.join(munis[:5]) if munis else 'n/d'}"
+                )
+            if lines:
+                snippets.append(f"{src}: " + " — ".join(lines))
         if snippets:
             parts.append(f"=== RAW DATA {macroarea.upper()} ===\n" + "\n".join(snippets))
 
-    return "\n\n".join(parts) if parts else "Nessun dato di contesto disponibile."
+    # --- GDELT + WTO: articoli geo recenti da raw_geo ---
+    geo_docs = list(db["raw_geo"].find(
+        {"country": "BR"},
+        {"source": 1, "title": 1, "summary_en": 1, "signals": 1,
+         "sentiment": 1, "topic": 1, "collected_at": 1},
+        sort=[("collected_at", -1)],
+        limit=6,
+    ))
+    debug["mongodb"]["raw_geo"] = f"{len(geo_docs)} doc"
+    geo_snippets = []
+    for doc in geo_docs:
+        src = doc.get("source", "?")
+        title = doc.get("title") or ""
+        summary = doc.get("summary_en") or ""
+        topic = doc.get("topic") or ""
+        sentiment = doc.get("sentiment") or ""
+        sigs = doc.get("signals", [])
+        line = f"[{src}] {title}"
+        if summary:
+            line += f" — {summary[:200]}"
+        if sigs:
+            line += f" | Segnali: {'; '.join(str(s) for s in sigs[:3])}"
+        if topic or sentiment:
+            line += f" ({topic}, {sentiment})"
+        geo_snippets.append(line)
+    if geo_snippets:
+        parts.append("=== NEWS GEO (GDELT/WTO) — raw_geo ===\n" + "\n".join(geo_snippets))
+
+    context = "\n\n".join(parts) if parts else "Nessun dato di contesto disponibile."
+    debug["total_chars"] = len(context)
+    debug["sections_found"] = len(parts)
+    return context, debug
 
 
 def _stream_chat_response(question: str, context: str, history: list[dict]):
     """Generator che streamma la risposta di Claude Sonnet."""
     system = """\
-Sei l'esperto globale delle origini del caffè di Lavazza (nome: CoffeeBot).
-Hai accesso ai dati di intelligence più recenti sul Brasile.
-Rispondi in italiano, in modo preciso e basato sui dati — cita sempre numeri specifici quando disponibili.
-Se la domanda è fuori dal tuo dominio (caffè, Brasile, supply chain), reindirizza educatamente.
+Sei l'esperto globale delle origini del caffè di Lavazza.
+Hai accesso ai dati di intelligence più recenti sul Brasile provenienti da 13 fonti dati:
+GDELT (news geopolitiche orarie), WTO News, Port Congestion (AIS), CONAB PDF (previsioni raccolto),
+USDA FAS, IBGE SIDRA, Comex Stat, FAOSTAT (colture), World Bank Pink Sheet, BCB PTAX, ECB (prezzi/FX),
+NASA FIRMS (incendi — arricchiti con coffee regions a livello municipale), NOAA ENSO (clima).
+
+Per i fuochi NASA FIRMS: il sistema arricchisce ogni rilevamento con i confini GeoJSON dei comuni
+produttori di caffè (MongoDB coffee_regions, 2 livelli: stati L1 e comuni L2). I campi
+coffee_zone_detections e coffee_zone_ratio indicano quanti fuochi cadono nei comuni produttori.
+
+Rispondi in italiano, cita sempre numeri specifici quando disponibili.
 Sii conciso (max 200 parole) a meno che l'utente non chieda approfondimenti.
+Se la domanda è fuori dal dominio caffè/Brasile/supply chain, reindirizza educatamente.
 """
     messages = []
     for msg in history[-6:]:  # ultimi 6 messaggi per contesto
@@ -611,16 +720,18 @@ Sii conciso (max 200 parole) a meno che l'utente non chieda approfondimenti.
 # ---------------------------------------------------------------------------
 
 with st.sidebar:
-    st.markdown("## ☕ Coffee Intelligence")
-    st.markdown("**🇧🇷 Brasile** — Fase 1")
+    st.markdown("## Coffee Intelligence")
+    st.markdown("**Brasile** — Fase 1")
     st.divider()
     demo_mode = st.toggle("Demo mode (bypass freshness)", value=True,
                           help="In demo mode tutti i dati sono considerati freschi")
+    rag_debug = st.toggle("Mostra RAG context", value=False,
+                          help="Mostra le sorgenti e il contesto recuperato per ogni risposta del chatbot")
     st.divider()
-    st.caption("Servizi:")
-    st.caption("• MongoDB `localhost:27017`")
-    st.caption("• Qdrant `localhost:6333`")
-    st.caption("• n8n `localhost:5678`")
+    st.caption("Servizi attivi:")
+    st.caption("• MongoDB localhost:27017")
+    st.caption("• Qdrant localhost:6333")
+    st.caption("• n8n localhost:5678")
     st.divider()
     st.caption("Agenti LangGraph:")
     st.caption("• env_agent → Haiku")
@@ -628,6 +739,9 @@ with st.sidebar:
     st.caption("• crops_agent → Haiku")
     st.caption("• geo_agent → Haiku + Qdrant")
     st.caption("• report_node → Sonnet")
+    st.divider()
+    st.caption("Dashboard ambiente:")
+    st.caption("cd dashboard && streamlit run dashboard.py")
 
 
 # ---------------------------------------------------------------------------
@@ -639,21 +753,23 @@ for key in ["daily_result", "weekly_result"]:
 
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
+if "rag_debug_history" not in st.session_state:
+    st.session_state.rag_debug_history = []  # lista di (question, debug_info, context)
 
 # ---------------------------------------------------------------------------
 # Tabs principali
 # ---------------------------------------------------------------------------
 tab_daily, tab_weekly, tab_chat = st.tabs([
-    "📊 Daily Report",
-    "📈 Weekly Reports",
-    "💬 Coffee Chat",
+    "Daily Report",
+    "Weekly Reports",
+    "Chat",
 ])
 
 # ============================================================================
 # TAB 1 — DAILY REPORT
 # ============================================================================
 with tab_daily:
-    st.markdown("## 📊 Report Giornaliero — Brasile")
+    st.markdown("## Report Giornaliero — Brasile")
     st.markdown(
         "Analisi completa del rischio supply chain caffè brasiliano. "
         "I 4 agenti girano in parallelo, poi Claude Sonnet genera il report."
@@ -661,11 +777,11 @@ with tab_daily:
 
     col_run, col_info = st.columns([1, 3])
     with col_run:
-        run_daily = st.button("▶ Avvia analisi Daily", type="primary",
+        run_daily = st.button("Avvia analisi Daily", type="primary",
                               use_container_width=True, key="btn_daily")
     with col_info:
         st.info(
-            "🔄 **Real-time:** vedrai ogni agente completare nell'ordine reale di esecuzione. "
+            "Real-time: vedrai ogni agente completare nell'ordine reale di esecuzione. "
             "I 4 sub-agenti (Haiku) girano in parallelo. Il report (Sonnet) arriva per ultimo."
         )
 
@@ -681,12 +797,12 @@ with tab_daily:
         _render_daily_report(st.session_state.daily_result)
     else:
         st.markdown("---")
-        with st.expander("ℹ️ Come funziona il sistema", expanded=True):
+        with st.expander("Come funziona il sistema", expanded=True):
             st.markdown("""
 **Layer 1 — Ingestion (n8n)**
-11 connettori raccolgono dati ogni ora/giorno/settimana/mese:
-GDELT · WTO RSS · CONAB PDF · USDA FAS · IBGE SIDRA · Comex Stat
-· World Bank · BCB PTAX · ECB · NASA FIRMS · NOAA ENSO
+13 connettori raccolgono dati ogni ora/giorno/settimana/mese:
+GDELT · WTO News · Port Congestion · CONAB PDF · USDA FAS · IBGE SIDRA · Comex Stat
+· FAOSTAT · World Bank · BCB PTAX · ECB · NASA FIRMS · NOAA ENSO
 
 **Layer 2 — Agenti LangGraph (schema-agnostico)**
 ```
@@ -699,14 +815,14 @@ START → [env_agent  ─┐
 **Formula Risk Score:**
 `final = geo×0.25 + environment×0.30 + crops×0.30 + prices×0.15`
 
-🟢 0-40 normale · 🟡 41-70 watch · 🔴 71-100 alert
+0-40 normale (verde) · 41-70 watch (giallo) · 71-100 alert (rosso)
             """)
 
 # ============================================================================
 # TAB 2 — WEEKLY REPORTS
 # ============================================================================
 with tab_weekly:
-    st.markdown("## 📈 Report Settimanale — Brasile")
+    st.markdown("## Report Settimanale — Brasile")
     st.markdown(
         "3 report dedicati generati da Claude Sonnet con focus specifico per team. "
         "Usa il contesto RAG degli ultimi 7 daily (se disponibili in Qdrant)."
@@ -714,11 +830,11 @@ with tab_weekly:
 
     col_run2, col_info2 = st.columns([1, 3])
     with col_run2:
-        run_weekly = st.button("▶ Avvia analisi Weekly", type="primary",
+        run_weekly = st.button("Avvia analisi Weekly", type="primary",
                                use_container_width=True, key="btn_weekly")
     with col_info2:
         st.info(
-            "📋 **3 report paralleli:** Acquisti (hedging/prezzi) · "
+            "3 report paralleli: Acquisti (hedging/prezzi) · "
             "Quality (qualità raccolto/regionale) · Management (sintesi strategica). "
             "Ognuno è una chiamata separata a Claude Sonnet con sistema prompt dedicato."
         )
@@ -740,36 +856,42 @@ with tab_weekly:
 
 | Team | Focus | Modello |
 |------|-------|---------|
-| 🛒 **Acquisti** | Prezzi arabica · hedging · finestre acquisto · rischio fornitura | Sonnet |
-| 🔬 **Quality** | Qualità raccolto · analisi regionale · rischio sensoriale · defect rate | Sonnet |
-| 📋 **Management** | Sintesi strategica · correlazioni · impatto P&L · decisioni top-level | Sonnet |
+| **Acquisti** | Prezzi arabica · hedging · finestre acquisto · rischio fornitura | Sonnet |
+| **Quality** | Qualità raccolto · analisi regionale · rischio sensoriale · defect rate | Sonnet |
+| **Management** | Sintesi strategica · correlazioni · impatto P&L · decisioni top-level | Sonnet |
         """)
 
 # ============================================================================
 # TAB 3 — CHATBOT RAG
 # ============================================================================
 with tab_chat:
-    st.markdown("## 💬 Coffee Intelligence Chat")
+    st.markdown("## Coffee Intelligence Chat")
     st.markdown(
         "Chiedi qualsiasi cosa sui dati di intelligence Brasile. "
         "Il chatbot usa Qdrant + MongoDB + Claude Sonnet per rispondere."
     )
 
-    # --- Mostra storia chat ---
-    for msg in st.session_state.chat_history:
+    # --- Mostra storia chat con RAG debug opzionale ---
+    for i, msg in enumerate(st.session_state.chat_history):
         with st.chat_message(msg["role"], avatar="☕" if msg["role"] == "assistant" else None):
             st.markdown(msg["content"])
+        # Mostra debug sotto ogni risposta assistant se abilitato
+        if rag_debug and msg["role"] == "assistant":
+            # trova il debug corrispondente (stesso indice turno)
+            turn_idx = sum(1 for m in st.session_state.chat_history[:i+1] if m["role"] == "assistant") - 1
+            if turn_idx < len(st.session_state.rag_debug_history):
+                _q, _dbg, _ctx = st.session_state.rag_debug_history[turn_idx]
+                _render_rag_debug(_q, _dbg, _ctx)
 
     # --- Input utente ---
     if prompt := st.chat_input("Es: Qual è il rischio attuale? Come stanno i prezzi arabica? Ci sono incendi?"):
-        # mostra messaggio utente
         st.session_state.chat_history.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
         # costruisci contesto RAG
-        with st.spinner("🔍 Cercando nei dati..."):
-            context = _build_chat_context(prompt)
+        with st.spinner("Cercando nei dati..."):
+            context, rag_debug_info = _build_chat_context(prompt)
 
         # stream risposta
         with st.chat_message("assistant", avatar="☕"):
@@ -777,21 +899,27 @@ with tab_chat:
                 _stream_chat_response(
                     prompt,
                     context,
-                    st.session_state.chat_history[:-1],  # escludi l'ultimo (corrente)
+                    st.session_state.chat_history[:-1],
                 )
             )
 
         st.session_state.chat_history.append({"role": "assistant", "content": response})
+        st.session_state.rag_debug_history.append((prompt, rag_debug_info, context))
+
+        # Mostra debug immediatamente se toggle attivo
+        if rag_debug:
+            _render_rag_debug(prompt, rag_debug_info, context)
 
     # --- Bottoni utility ---
     col_clear, col_examples = st.columns([1, 3])
     with col_clear:
-        if st.button("🗑️ Cancella chat", use_container_width=True):
+        if st.button("Cancella chat", use_container_width=True):
             st.session_state.chat_history = []
+            st.session_state.rag_debug_history = []
             st.rerun()
 
     with col_examples:
-        with st.expander("💡 Domande di esempio"):
+        with st.expander("Domande di esempio"):
             examples = [
                 "Qual è il risk score attuale per il Brasile?",
                 "Come stanno i prezzi arabica? Conviene hedgiare?",

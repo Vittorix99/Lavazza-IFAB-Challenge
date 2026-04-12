@@ -379,7 +379,7 @@
         "main": [
           [
             {
-              "node": "Run: GDELT News",
+              "node": "Run: WTO News",
               "type": "main",
               "index": 0
             }
@@ -390,7 +390,7 @@
         "main": [
           [
             {
-              "node": "Run: WTO News",
+              "node": "✅ Ingestion Completata",
               "type": "main",
               "index": 0
             }
@@ -467,7 +467,7 @@
         "main": [
           [
             {
-              "node": "✅ Ingestion Completata",
+              "node": "Run: GDELT News",
               "type": "main",
               "index": 0
             }

@@ -124,13 +124,9 @@
     },
     {
       "parameters": {
-        "operation": "upsert",
+        "operation": "insert",
         "collection": "ingestion_log",
-        "options": {
-          "upsert": true
-        },
-        "fields": "source,country,macroarea,cadenza,run_date,status,completed_at,report_period,survey_number,season,market_year,latest_year,quote_date,total_detections,latest_period,enso_phase,items_ingested,ports_monitored",
-        "filter": "{ \"source\": \"WB_PINK_SHEET\", \"country\": \"BR\", \"run_date\": {{ $json.run_date }} }"
+        "fields": "source,country,macroarea,cadenza,run_date,status,completed_at"
       },
       "type": "n8n-nodes-base.mongoDb",
       "typeVersion": 1,
@@ -201,15 +197,16 @@
         -2520
       ],
       "id": "wb-ai-signals-node",
-      "name": "World Bank AI Signals"
+      "name": "World Bank AI Signals",
+      "continueOnFail": true
     },
     {
       "parameters": {
         "model": {
           "__rl": true,
-          "value": "gpt-5.4-mini",
+          "value": "gpt-4o-mini",
           "mode": "list",
-          "cachedResultName": "gpt-5.4-mini"
+          "cachedResultName": "gpt-4o-mini"
         },
         "builtInTools": {},
         "options": {
@@ -230,7 +227,8 @@
           "id": "0Vum5STk59lUOybm",
           "name": "OpenAi account"
         }
-      }
+      },
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -255,7 +253,7 @@
         -2520
       ],
       "parameters": {
-        "jsCode": "const item = $input.first();\nconst err = item.json?.error ?? item.error?.message ?? '';\nconst statusCode = item.json?.statusCode ?? item.json?.status ?? 0;\nif (err || statusCode >= 400) {\n  return [{ json: {\n    _api_skip: true,\n    source: '07_WORLD_BANK_PINK_SHEET',\n    country: 'BR',\n    status: 'skipped_api_error',\n    reason: `API unavailable: ${err || 'HTTP ' + statusCode}`,\n    run_date: new Date().toISOString(),\n    completed_at: new Date().toISOString()\n  } }];\n}\nreturn [{ json: item.json }];"
+        "jsCode": "const item = $input.first();\nconst err = item.json?.error ?? item.error?.message ?? '';\nconst statusCode = item.json?.statusCode ?? item.json?.status ?? 0;\nif (err || statusCode >= 400) {\n  return [{ json: {\n    _api_skip: true,\n    source: '07_WORLD_BANK_PINK_SHEET',\n    country: 'BR',\n    status: 'skipped_api_error',\n    reason: `API unavailable: ${err || 'HTTP ' + statusCode}`,\n    run_date: new Date().toISOString(),\n    completed_at: new Date().toISOString()\n  } }];\n}\nreturn [{ json: item.json, binary: item.binary }];"
       }
     },
     {
@@ -325,6 +323,17 @@
         },
         "options": {}
       }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2960,
+        -2508
+      ],
+      "id": "execute-workflow-trigger-MR9h5J37",
+      "name": "Execute Workflow Trigger"
     }
   ],
   "pinData": {},

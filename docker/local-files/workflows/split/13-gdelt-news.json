@@ -6,10 +6,10 @@
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
-        -2000,
-        436
+        -2688,
+        -32
       ],
-      "id": "manual-trigger-gdelt",
+      "id": "722cefd9-864a-4638-9c44-e45d6eba0bff",
       "name": "Manual Trigger"
     },
     {
@@ -26,10 +26,10 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        -2000,
-        556
+        -2688,
+        96
       ],
-      "id": "schedule-trigger-gdelt",
+      "id": "00712322-08ab-476d-8b71-f1efc603f2fb",
       "name": "Schedule Trigger"
     },
     {
@@ -71,10 +71,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -1600,
-        496
+        -2288,
+        32
       ],
-      "id": "gdelt-caffe-node",
+      "id": "479756a5-0143-4519-9ab8-74a3bef47f64",
       "name": "GDELT caffè",
       "retryOnFail": true,
       "maxTries": 5,
@@ -83,18 +83,17 @@
     },
     {
       "parameters": {
-        "resume": "timeInterval",
-        "amount": 4,
-        "unit": "seconds"
+        "amount": 8
       },
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
-        -1400,
-        496
+        -2096,
+        32
       ],
-      "id": "wait-1-node",
-      "name": "Wait 4s 1",
+      "id": "d945aad6-c177-4b62-b9f9-d9c5d2a231c5",
+      "name": "Wait 8s 1",
+      "continueOnFail": false,
       "webhookId": "wait-1-webhook"
     },
     {
@@ -136,26 +135,27 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        0,
-        496
+        -688,
+        32
       ],
-      "id": "gdelt-disastri-node",
+      "id": "16e78893-4f96-4c99-9df4-039f353ee6e7",
       "name": "GDELT disastri",
       "retryOnFail": true,
       "maxTries": 5,
-      "waitBetweenTries": 5000
+      "waitBetweenTries": 5000,
+      "continueOnFail": true
     },
     {
       "parameters": {
-        "jsCode": "const seen = new Map();\nconst nodeNames = ['GDELT caff\\u00e8', 'GDELT disastri'];\n\nfor (const name of nodeNames) {\n  try {\n    const items = $(name).all();\n    for (const item of items) {\n      const articles = item.json.articles || [];\n      for (const art of articles) {\n        if (art.url && !seen.has(art.url)) {\n          seen.set(art.url, art);\n        }\n      }\n    }\n  } catch(e) {}\n}\n\nreturn [{ json: { articles: Array.from(seen.values()) } }];"
+        "jsCode": "const seen = new Map();\nconst nodeNames = ['GDELT caff\\u00e8', 'API Check Disastri'];\n\nfor (const name of nodeNames) {\n  try {\n    const items = $(name).all();\n    for (const item of items) {\n      const articles = item.json.articles || [];\n      for (const art of articles) {\n        if (art.url && !seen.has(art.url)) {\n          seen.set(art.url, art);\n        }\n      }\n    }\n  } catch(e) {}\n}\n\nreturn [{ json: { articles: Array.from(seen.values()) } }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        240,
-        496
+        -448,
+        32
       ],
-      "id": "f73ef184-1a87-40a1-894c-4902e0115977",
+      "id": "491594c8-cbcb-4ec1-8457-c38306322c38",
       "name": "GDELT Multi-Query"
     },
     {
@@ -166,10 +166,10 @@
       "type": "n8n-nodes-base.splitOut",
       "typeVersion": 1,
       "position": [
-        460,
-        496
+        -240,
+        32
       ],
-      "id": "27f8dd2a-1b09-4651-b875-83cfb1427bc5",
+      "id": "e692a471-efa6-4733-b621-8d1bd8fcb09d",
       "name": "Split Out1"
     },
     {
@@ -179,23 +179,23 @@
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
       "position": [
-        700,
-        496
+        16,
+        32
       ],
-      "id": "610695c4-135c-49ba-ae68-bc4a384476ba",
+      "id": "692e74da-62ed-41a4-a7e9-7cfe99087a38",
       "name": "Loop Over Items1"
     },
     {
       "parameters": {
-        "amount": 1
+        "amount": 8
       },
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
-        900,
-        512
+        240,
+        32
       ],
-      "id": "345fdf2d-efae-400e-9f83-7fc8093d34fe",
+      "id": "af48a816-1422-4c76-a993-b97ab2f34398",
       "name": "Wait1",
       "webhookId": "6051aa69-e3ba-44e6-ad12-f044f14540b6"
     },
@@ -215,19 +215,20 @@
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
       "typeVersion": 1.9,
       "position": [
-        1120,
-        512
+        432,
+        48
       ],
-      "id": "27196df6-8187-431b-9637-301357dfa161",
-      "name": "Basic LLM Chain1"
+      "id": "e2becbc3-8614-4d0f-b569-e733e05906e9",
+      "name": "Basic LLM Chain1",
+      "continueOnFail": true
     },
     {
       "parameters": {
         "model": {
           "__rl": true,
-          "value": "gpt-5.4-mini",
+          "value": "gpt-4o-mini",
           "mode": "list",
-          "cachedResultName": "gpt-5.4-mini"
+          "cachedResultName": "gpt-4o-mini"
         },
         "builtInTools": {},
         "options": {
@@ -237,10 +238,10 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1.3,
       "position": [
-        1120,
-        720
+        432,
+        256
       ],
-      "id": "41402a89-7898-46db-a211-61022196d5b2",
+      "id": "bcc6535e-e28b-4815-ba4f-4899f36108d5",
       "name": "OpenAI Chat Model1",
       "retryOnFail": true,
       "credentials": {
@@ -248,19 +249,20 @@
           "id": "0Vum5STk59lUOybm",
           "name": "OpenAi account"
         }
-      }
+      },
+      "continueOnFail": true
     },
     {
       "parameters": {
-        "jsCode": "const parsed = JSON.parse($json.text);\nreturn [{ json: parsed }];"
+        "jsCode": "const raw = ($json.text || '').replace(/^```(?:json)?\\s*/i, '').replace(/\\s*```\\s*$/i, '').trim();\nconst parsed = JSON.parse(raw);\nreturn [{ json: parsed }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1400,
-        512
+        720,
+        48
       ],
-      "id": "aa3c9e3d-9e68-4c35-bf03-8952d849ae54",
+      "id": "f2043b54-76e2-492f-9f61-403c9064132b",
       "name": "Code in JavaScript1"
     },
     {
@@ -291,10 +293,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        1600,
-        512
+        912,
+        48
       ],
-      "id": "d6661d32-4bd9-45d1-a70d-a2211552fbcb",
+      "id": "d95a6418-2f52-4c40-bcad-543fb427399f",
       "name": "If1"
     },
     {
@@ -312,10 +314,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        1840,
-        496
+        1152,
+        32
       ],
-      "id": "ffc6ea51-bcd8-462a-b801-5dca2ab9befd",
+      "id": "1cf1083b-5ba4-4e71-9b7a-02db17b0aa1f",
       "name": "Scrape Article",
       "retryOnFail": true,
       "maxTries": 5,
@@ -328,10 +330,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2060,
-        496
+        1376,
+        32
       ],
-      "id": "9e54e59e-ea23-4340-a602-d2eae39a4266",
+      "id": "c891af8d-fd75-4fd6-944b-059bbc795a7a",
       "name": "Strip HTML"
     },
     {
@@ -350,19 +352,20 @@
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
       "typeVersion": 1.9,
       "position": [
-        2280,
-        480
+        1600,
+        16
       ],
-      "id": "2566ba89-3135-4f99-bd34-114fd5ac36d9",
-      "name": "Extract Signals"
+      "id": "41c7321d-6701-495b-be15-ef1e54693ca1",
+      "name": "Extract Signals",
+      "continueOnFail": true
     },
     {
       "parameters": {
         "model": {
           "__rl": true,
-          "value": "gpt-5.4-mini",
+          "value": "gpt-4o-mini",
           "mode": "list",
-          "cachedResultName": "gpt-5.4-mini"
+          "cachedResultName": "gpt-4o-mini"
         },
         "builtInTools": {},
         "options": {
@@ -372,10 +375,10 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1.3,
       "position": [
-        2280,
-        672
+        1600,
+        208
       ],
-      "id": "80800aca-dc28-406d-a044-7d25ff406348",
+      "id": "c0974160-d7c3-4714-b78f-601abfee7b16",
       "name": "OpenAI Extract Model",
       "retryOnFail": true,
       "credentials": {
@@ -383,39 +386,40 @@
           "id": "0Vum5STk59lUOybm",
           "name": "OpenAi account"
         }
-      }
+      },
+      "continueOnFail": true
     },
     {
       "parameters": {
-        "jsCode": "function getCollectedPeriod(isoTs, cadenza) {\n  const d = new Date(isoTs || new Date().toISOString());\n  const pad = n => String(n).padStart(2, '0');\n  const yyyy = d.getUTCFullYear();\n  const mm = pad(d.getUTCMonth() + 1);\n  const dd = pad(d.getUTCDate());\n  const hh = pad(d.getUTCHours());\n  const doy = Math.floor((d - new Date(Date.UTC(yyyy,0,1))) / 86400000);\n  const week = pad(Math.ceil((doy + new Date(Date.UTC(yyyy,0,1)).getUTCDay() + 1) / 7));\n  switch((cadenza||'').toLowerCase()) {\n    case 'hourly':  return `${yyyy}-${mm}-${dd}T${hh}`;\n    case 'daily':   return `${yyyy}-${mm}-${dd}`;\n    case 'weekly':  return `${yyyy}-W${week}`;\n    case 'monthly': return `${yyyy}-${mm}`;\n    default:        return `${yyyy}-${mm}-${dd}`;\n  }\n}\nconst now = new Date().toISOString();\nconst _collectedPeriod = getCollectedPeriod(now, 'hourly');\n\nreturn [{\n  json: {\n    source: 'GDELT',\n    source_url: 'https://api.gdeltproject.org/api/v2/doc/doc',\n    country: 'BR',\n    macroarea: 'geo',\n    collected_at: now,\n    collected_period: _collectedPeriod,\n        url: meta.url,\n    topic: meta.topic,\n    relevance_score: meta.relevance_score,\n    reason: meta.reason,\n    signals: signals.signals,\n    entities: signals.entities,\n    sentiment: signals.sentiment,\n    summary_en: signals.summary_en,\n    embed_text: signals.summary_en + ' ' + (signals.signals || []).join('. ')\n  }\n    _chart_fields: [],\n  }\n}];"
+        "jsCode": "function getCollectedPeriod(isoTs, cadenza) {\n  const d = new Date(isoTs || new Date().toISOString());\n  const pad = n => String(n).padStart(2, '0');\n  const yyyy = d.getUTCFullYear();\n  const mm = pad(d.getUTCMonth() + 1);\n  const dd = pad(d.getUTCDate());\n  const hh = pad(d.getUTCHours());\n  const doy = Math.floor((d - new Date(Date.UTC(yyyy,0,1))) / 86400000);\n  const week = pad(Math.ceil((doy + new Date(Date.UTC(yyyy,0,1)).getUTCDay() + 1) / 7));\n  switch((cadenza||'').toLowerCase()) {\n    case 'hourly':  return `${yyyy}-${mm}-${dd}T${hh}`;\n    case 'daily':   return `${yyyy}-${mm}-${dd}`;\n    case 'weekly':  return `${yyyy}-W${week}`;\n    case 'monthly': return `${yyyy}-${mm}`;\n    default:        return `${yyyy}-${mm}-${dd}`;\n  }\n}\nconst now = new Date().toISOString();\nconst _collectedPeriod = getCollectedPeriod(now, 'hourly');\n\n// Parse LLM extraction output\nlet signals = {};\ntry { const _raw = ($json.text || '').replace(/^```(?:json)?\\s*/i, '').replace(/\\s*```\\s*$/i, '').trim(); signals = JSON.parse(_raw || '{}'); } catch(e) { signals = {}; }\n\n// Filter metadata (url, topic, relevance_score, reason) from Code in JavaScript1\nconst meta = $('Code in JavaScript1').item.json;\n\n// Original GDELT article data from the loop\nlet original = {};\ntry { original = $('Loop Over Items1').item.json; } catch(e) {}\n\nreturn [{\n  json: {\n    source: 'GDELT',\n    source_url: 'https://api.gdeltproject.org/api/v2/doc/doc',\n    country: 'BR',\n    macroarea: 'geo',\n    collected_at: now,\n    collected_period: _collectedPeriod,\n    url: meta.url || original.url || null,\n    topic: meta.topic || null,\n    relevance_score: meta.relevance_score || null,\n    reason: meta.reason || null,\n    title: original.title || null,\n    domain: original.domain || null,\n    seendate: original.seendate || null,\n    signals: signals.signals || [],\n    entities: signals.entities || [],\n    sentiment: signals.sentiment || null,\n    summary_en: signals.summary_en || null,\n    embed_text: (signals.summary_en || '') + ' ' + (signals.signals || []).join('. ')\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2580,
-        480
+        1888,
+        16
       ],
-      "id": "e18ca0d7-148f-4d49-b11f-5112ac0d153c",
+      "id": "e0a8bfad-4a29-4d90-84af-3846c8bf124e",
       "name": "Parse Signals"
     },
     {
       "parameters": {
-        "operation": "upsert",
+        "operation": "update",
         "collection": "raw_geo",
-        "fields": "source,source_url,country,macroarea,collected_at,url,topic,relevance_score,reason,signals,entities,sentiment,summary_en,embed_text",
-        "options": {
-          "upsert": true
-        },
-        "filter": "{ \"source\": \"GDELT\", \"country\": \"BR\", \"url\": {{ $json.url }} }"
+        "updateKey": "url",
+        "fields": "source,source_url,country,macroarea,collected_at,collected_period,url,topic,relevance_score,reason,title,domain,seendate,signals,entities,sentiment,summary_en,embed_text",
+        "upsert": true,
+        "options": {}
       },
       "type": "n8n-nodes-base.mongoDb",
       "typeVersion": 1,
       "position": [
-        2800,
-        480
+        2112,
+        16
       ],
-      "id": "64c3a7e7-3dcb-4104-a6fb-80931f946b83",
+      "id": "ad5d1c44-cc1f-48f7-8d6f-f4c7a8e9215c",
       "name": "MongoDB raw_geo",
+      "continueOnFail": true,
       "credentials": {
         "mongoDb": {
           "id": "Jo4ZHZCY4HM8JRrD",
@@ -458,32 +462,32 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        3020,
-        464
+        2336,
+        0
       ],
-      "id": "4fbe8885-98c4-4678-a655-aae58e771a16",
+      "id": "9f93913e-b5db-4d29-ae19-87648dbd9ee8",
       "name": "OpenAI Embeddings",
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
       "credentials": {
         "openAiApi": {
           "id": "0Vum5STk59lUOybm",
           "name": "OpenAi account"
         }
-      },
-      "retryOnFail": true,
-      "maxTries": 5,
-      "waitBetweenTries": 5000
+      }
     },
     {
       "parameters": {
-        "jsCode": "\n// Calcola collected_period da collected_at + cadenza\nfunction getCollectedPeriod(collectedAt, cadenza) {\n  const d = new Date(collectedAt || new Date().toISOString());\n  const pad = (n) => String(n).padStart(2, '0');\n  const yyyy = d.getUTCFullYear();\n  const mm = pad(d.getUTCMonth() + 1);\n  const dd = pad(d.getUTCDate());\n  const hh = pad(d.getUTCHours());\n  // ISO week number\n  const startOfYear = new Date(Date.UTC(yyyy, 0, 1));\n  const weekNo = pad(Math.ceil(((d - startOfYear) / 86400000 + startOfYear.getUTCDay() + 1) / 7));\n  switch((cadenza || '').toLowerCase()) {\n    case 'hourly':  return `${yyyy}-${mm}-${dd}T${hh}`;\n    case 'daily':   return `${yyyy}-${mm}-${dd}`;\n    case 'weekly':  return `${yyyy}-W${weekNo}`;\n    case 'monthly': return `${yyyy}-${mm}`;\n    default:        return `${yyyy}-${mm}-${dd}`;\n  }\n}\n\nconst _cadenza = 'hourly';\nconst _collectedAt = now || new Date().toISOString();\nconst _collectedPeriod = getCollectedPeriod(_collectedAt, _cadenza);\nconst meta = $('Parse Signals').item.json;\nconst vector = $json.data[0].embedding;\n\nconst url = meta.url;\nlet hash = 0;\nfor (let i = 0; i < url.length; i++) {\n  hash = ((hash << 5) - hash) + url.charCodeAt(i);\n  hash |= 0;\n}\nconst pointId = Math.abs(hash);\n\nreturn [{\n  json: {\n    points: [{\n      id: pointId,\n      vector: vector,\n      payload: {\n        source: meta.source,\n        source_url: meta.source_url,\n        country: meta.country,\n        macroarea: meta.macroarea,\n        collected_at: meta.collected_at,\n        url: meta.url,\n        topic: meta.topic,\n        relevance_score: meta.relevance_score,\n        sentiment: meta.sentiment,\n        summary_en: meta.summary_en,\n        signals: meta.signals\n      }\n    }]\n  }\n}];"
+        "jsCode": "function getCollectedPeriod(collectedAt, cadenza) {\n  const d = new Date(collectedAt || new Date().toISOString());\n  const pad = (n) => String(n).padStart(2, '0');\n  const yyyy = d.getUTCFullYear();\n  const mm = pad(d.getUTCMonth() + 1);\n  const dd = pad(d.getUTCDate());\n  const hh = pad(d.getUTCHours());\n  const startOfYear = new Date(Date.UTC(yyyy, 0, 1));\n  const weekNo = pad(Math.ceil(((d - startOfYear) / 86400000 + startOfYear.getUTCDay() + 1) / 7));\n  switch((cadenza || '').toLowerCase()) {\n    case 'hourly':  return `${yyyy}-${mm}-${dd}T${hh}`;\n    case 'daily':   return `${yyyy}-${mm}-${dd}`;\n    case 'weekly':  return `${yyyy}-W${weekNo}`;\n    case 'monthly': return `${yyyy}-${mm}`;\n    default:        return `${yyyy}-${mm}-${dd}`;\n  }\n}\n\nconst _cadenza = 'hourly';\nconst meta = $('Parse Signals').item.json;\nconst _collectedAt = meta.collected_at || new Date().toISOString();\nconst _collectedPeriod = getCollectedPeriod(_collectedAt, _cadenza);\nconst vector = $json.data[0].embedding;\n\nconst url = meta.url || '';\nlet hash = 0;\nfor (let i = 0; i < url.length; i++) {\n  hash = ((hash << 5) - hash) + url.charCodeAt(i);\n  hash |= 0;\n}\nconst pointId = Math.abs(hash) || Math.floor(Math.random() * 1e9);\n\nreturn [{\n  json: {\n    points: [{\n      id: pointId,\n      vector: vector,\n      payload: {\n        source: meta.source,\n        source_url: meta.source_url,\n        country: meta.country,\n        macroarea: meta.macroarea,\n        collected_at: meta.collected_at,\n        url: meta.url,\n        topic: meta.topic,\n        relevance_score: meta.relevance_score,\n        sentiment: meta.sentiment,\n        summary_en: meta.summary_en,\n        signals: meta.signals\n      }\n    }]\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3240,
-        464
+        2560,
+        0
       ],
-      "id": "73ce9a93-a2a5-4d44-a443-8f36c7a0eff7",
+      "id": "365bef33-5a5c-4a01-b485-3481c36005cb",
       "name": "Build Qdrant Payload"
     },
     {
@@ -509,10 +513,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        3460,
-        464
+        2768,
+        0
       ],
-      "id": "e5af3929-b031-4798-821f-dc9a9ce72f15",
+      "id": "884e1611-7ea9-40bb-abf4-9e303e65a123",
       "name": "Qdrant Upsert",
       "retryOnFail": true,
       "maxTries": 5,
@@ -525,29 +529,26 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        900,
-        320
+        208,
+        -144
       ],
-      "id": "10304559-6422-45c7-a7b7-b0891beab3c4",
+      "id": "d33bfea3-d6a4-407d-8888-cb3d6434802b",
       "name": "Build Ingestion Log"
     },
     {
       "parameters": {
-        "operation": "upsert",
+        "operation": "insert",
         "collection": "ingestion_log",
-        "options": {
-          "upsert": true
-        },
-        "fields": "source,country,macroarea,cadenza,run_date,status,completed_at,report_period,survey_number,season,market_year,latest_year,quote_date,total_detections,latest_period,enso_phase,items_ingested,ports_monitored",
-        "filter": "{ \"source\": \"GDELT\", \"country\": \"BR\", \"run_date\": {{ $json.run_date }} }"
+        "fields": "source,country,macroarea,cadenza,run_date,status,completed_at",
+        "options": {}
       },
       "type": "n8n-nodes-base.mongoDb",
       "typeVersion": 1,
       "position": [
-        1120,
-        320
+        432,
+        -144
       ],
-      "id": "0e518f10-1c9e-47e2-b595-c05c6210515a",
+      "id": "62057ad7-bce6-4518-a1fe-18a66ee92c91",
       "name": "MongoDB ingestion_log",
       "credentials": {
         "mongoDb": {
@@ -557,27 +558,19 @@
       }
     },
     {
-      "id": "d27bfc6d-6c95-4f72-9a57-42e9b2f3e791",
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst err = item.json?.error ?? item.error?.message ?? '';\nconst statusCode = item.json?.statusCode ?? item.json?.status ?? 0;\nif (err || statusCode >= 400) {\n  return [{ json: {\n    _api_skip: true,\n    source: 'GDELT',\n    country: 'BR',\n    macroarea: 'geo',\n    cadenza: 'hourly',\n    status: 'skipped_api_error',\n    reason: `API unavailable: ${err || 'HTTP ' + statusCode}`,\n    run_date: new Date().toISOString(),\n    completed_at: new Date().toISOString()\n  } }];\n}\nreturn [{ json: item.json }];"
+      },
+      "id": "2d301576-e56d-4734-a08e-ede188e65b97",
       "name": "API Check",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1380,
-        496
-      ],
-      "parameters": {
-        "jsCode": "const item = $input.first();\nconst err = item.json?.error ?? item.error?.message ?? '';\nconst statusCode = item.json?.statusCode ?? item.json?.status ?? 0;\nif (err || statusCode >= 400) {\n  return [{ json: {\n    _api_skip: true,\n    source: '13_GDELT_NEWS',\n    country: 'BR',\n    status: 'skipped_api_error',\n    reason: `API unavailable: ${err || 'HTTP ' + statusCode}`,\n    run_date: new Date().toISOString(),\n    completed_at: new Date().toISOString()\n  } }];\n}\nreturn [{ json: item.json }];"
-      }
+        -1888,
+        -160
+      ]
     },
     {
-      "id": "e3155452-178a-4841-8f01-f1808a3fa0e7",
-      "name": "API Skip?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [
-        -1160,
-        496
-      ],
       "parameters": {
         "conditions": {
           "options": {
@@ -597,21 +590,20 @@
             }
           ],
           "combinator": "and"
-        }
-      }
+        },
+        "options": {}
+      },
+      "id": "e20c12b4-36a8-47cb-8efb-1a7d261cbc2f",
+      "name": "API Skip?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1856,
+        32
+      ]
     },
     {
-      "id": "4a7a6760-b6e3-46ca-9b59-45b4359da727",
-      "name": "Return Status",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
-      "position": [
-        1320,
-        320
-      ],
       "parameters": {
-        "mode": "manual",
-        "duplicateItem": false,
         "assignments": {
           "assignments": [
             {
@@ -635,7 +627,40 @@
           ]
         },
         "options": {}
-      }
+      },
+      "id": "833ea691-d8fe-472c-a984-4d93ed90c608",
+      "name": "Return Status",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        640,
+        -144
+      ]
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2928,
+        32
+      ],
+      "id": "0413c6b7-5666-4d82-8ec0-136e502159e6",
+      "name": "Execute Workflow Trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst err = item.json?.error ?? item.error?.message ?? '';\nconst statusCode = item.json?.statusCode ?? item.json?.status ?? 0;\nif (err || statusCode >= 400) {\n  return [{ json: { articles: [] } }];\n}\nreturn [{ json: item.json }];"
+      },
+      "id": "b7c8d9e0-f1a2-3456-bcde-f01234567891",
+      "name": "API Check Disastri",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        32
+      ],
+      "continueOnFail": false
     }
   ],
   "pinData": {},
@@ -651,7 +676,7 @@
         ]
       ]
     },
-    "Wait 4s 1": {
+    "Wait 8s 1": {
       "main": [
         [
           {
@@ -663,6 +688,17 @@
       ]
     },
     "GDELT disastri": {
+      "main": [
+        [
+          {
+            "node": "API Check Disastri",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Check Disastri": {
       "main": [
         [
           {
@@ -699,14 +735,14 @@
       "main": [
         [
           {
-            "node": "Wait1",
+            "node": "Build Ingestion Log",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Build Ingestion Log",
+            "node": "Wait1",
             "type": "main",
             "index": 0
           }
@@ -929,7 +965,7 @@
         ],
         [
           {
-            "node": "Wait 4s 1",
+            "node": "Wait 8s 1",
             "type": "main",
             "index": 0
           }
@@ -957,19 +993,19 @@
           }
         ]
       ]
-    },
-    "Return Status": {
-      "main": [
-        []
-      ]
     }
   },
-  "active": false,
+  "active": true,
   "settings": {
     "executionOrder": "v1",
     "binaryMode": "separate",
-    "availableInMCP": false
+    "availableInMCP": false,
+    "callerPolicy": "workflowsFromSameOwner"
   },
-  "tags": [],
-  "id": "udzCjAsrPBiiZ1IJ"
+  "versionId": "54bec304-2a7f-4733-8246-c3cfd719becd",
+  "meta": {
+    "instanceId": "2be5d016e514bca7075b92e7e4319cc52b5ecaf9d38e791fac92ccc23d3d69ba"
+  },
+  "id": "udzCjAsrPBiiZ1IJ",
+  "tags": []
 }

@@ -125,13 +125,9 @@
     },
     {
       "parameters": {
-        "operation": "upsert",
+        "operation": "insert",
         "collection": "ingestion_log",
-        "options": {
-          "upsert": true
-        },
-        "fields": "source,country,macroarea,cadenza,run_date,status,completed_at,report_period,survey_number,season,market_year,latest_year,quote_date,total_detections,latest_period,enso_phase,items_ingested,ports_monitored",
-        "filter": "{ \"source\": \"USDA_FAS_PSD\", \"country\": \"BR\", \"run_date\": {{ $json.run_date }} }"
+        "fields": "source,country,macroarea,cadenza,run_date,status,completed_at"
       },
       "type": "n8n-nodes-base.mongoDb",
       "typeVersion": 1,
@@ -168,15 +164,16 @@
         -3040
       ],
       "id": "usda-ai-signals-chain-node",
-      "name": "USDA AI Signals"
+      "name": "USDA AI Signals",
+      "continueOnFail": true
     },
     {
       "parameters": {
         "model": {
           "__rl": true,
-          "value": "gpt-5.4-mini",
+          "value": "gpt-4o-mini",
           "mode": "list",
-          "cachedResultName": "gpt-5.4-mini"
+          "cachedResultName": "gpt-4o-mini"
         },
         "builtInTools": {},
         "options": {
@@ -197,7 +194,8 @@
           "id": "0Vum5STk59lUOybm",
           "name": "OpenAi account"
         }
-      }
+      },
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -222,7 +220,7 @@
         -2920
       ],
       "parameters": {
-        "jsCode": "const item = $input.first();\nconst err = item.json?.error ?? item.error?.message ?? '';\nconst statusCode = item.json?.statusCode ?? item.json?.status ?? 0;\nif (err || statusCode >= 400) {\n  return [{ json: {\n    _api_skip: true,\n    source: '05_USDA_PSD',\n    country: 'BR',\n    status: 'skipped_api_error',\n    reason: `API unavailable: ${err || 'HTTP ' + statusCode}`,\n    run_date: new Date().toISOString(),\n    completed_at: new Date().toISOString()\n  } }];\n}\nreturn [{ json: item.json }];"
+        "jsCode": "const items = $input.all();\nconst first = items[0];\nconst err = first?.json?.error ?? first?.error?.message ?? '';\nconst statusCode = first?.json?.statusCode ?? first?.json?.status ?? 0;\nif (err || statusCode >= 400) {\n  return [{ json: {\n    _api_skip: true,\n    source: '05_USDA_FAS_PSD',\n    country: 'BR',\n    status: 'skipped_api_error',\n    reason: `API unavailable: ${err || 'HTTP ' + statusCode}`,\n    run_date: new Date().toISOString(),\n    completed_at: new Date().toISOString()\n  } }];\n}\nreturn items.map(item => ({ json: item.json }));"
       }
     },
     {
@@ -292,6 +290,17 @@
         },
         "options": {}
       }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2480,
+        -2966
+      ],
+      "id": "execute-workflow-trigger-JSBq7atB",
+      "name": "Execute Workflow Trigger"
     }
   ],
   "pinData": {},

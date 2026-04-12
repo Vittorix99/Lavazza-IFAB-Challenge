@@ -14,10 +14,11 @@ Piattaforma di intelligence automatizzata per Lavazza che monitora le condizioni
 ### Layer 1 — Ingestion (n8n)
 Workflow n8n schedulati raccolgono dati dalle fonti esterne e salvano in MongoDB o Qdrant.
 
-Ogni documento salvato include tre campi fissi:
+Ogni documento salvato include quattro campi fissi:
 - `country`: sempre `"BR"`
 - `macroarea`: uno tra `geo`, `colture`, `prices`, `environment`
 - `collected_at`: ISO 8601 timestamp
+- `collected_period`: stringa derivata da `collected_at` + cadenza (`YYYY-MM-DDTHH` / `YYYY-MM-DD` / `YYYY-Www` / `YYYY-MM`) — usata per dedup
 
 Al termine di ogni run il connettore scrive in `ingestion_log` (MongoDB) con: `source`, `country`, `run_date`, `status: "done"`, `completed_at`.
 
@@ -26,31 +27,36 @@ Grafo LangGraph triggerato quando tutti i connettori attesi hanno completato l'i
 
 ---
 
-## 11 Fonti dati attive (Brasile)
+## 13 Fonti dati attive (Brasile)
 
 | # | Fonte | Macroarea | Tipo | Cadenza |
 |---|-------|-----------|------|---------|
-| 1 | GDELT Project | geo | Tipo 5 — API + Haiku | Ogni ora |
-| 2 | WTO RSS | geo | Tipo 2 — RSS | Ogni 6 ore |
-| 3 | CONAB PDF | colture | Tipo 4 — PDF + Haiku | Settimanale |
-| 4 | USDA FAS PSD | colture | Tipo 1 — API JSON | Settimanale |
-| 5 | IBGE SIDRA | colture | Tipo 1 — API JSON | Settimanale |
-| 6 | Comex Stat | colture | Tipo 1 — API JSON | Mensile |
-| 7 | World Bank Pink Sheet | prices | Tipo 3 — XLS download | Mensile |
-| 8 | BCB PTAX | prices | Tipo 1 — API OData | Giornaliero |
-| 9 | ECB Data Portal | prices | Tipo 1 — API SDMX | Giornaliero |
-| 10 | NASA FIRMS | environment | Tipo 1 — API JSON | Ogni ora |
-| 11 | NOAA ENSO Index | environment | Tipo 3 — file download | Mensile |
+| 1 | GDELT Project | geo | Tipo 5 — API + OpenAI | Ogni ora |
+| 2 | WTO News | geo | Tipo 5 — API + OpenAI | Ogni 6 ore |
+| 3 | Port Congestion (AIS interno) | geo | Tipo 1 — HTTP interno | Ogni ora |
+| 4 | CONAB PDF | colture | Tipo 4 — PDF + OpenAI | Trimestrale |
+| 5 | USDA FAS PSD | colture | Tipo 1 — API JSON | Settimanale |
+| 6 | IBGE SIDRA | colture | Tipo 1 — API JSON | Settimanale |
+| 7 | Comex Stat | colture | Tipo 1 — API JSON | Mensile |
+| 8 | FAOSTAT QCL | colture | Tipo 1 — API JSON | Mensile |
+| 9 | World Bank Pink Sheet | prices | Tipo 3 — XLS download | Mensile |
+| 10 | BCB PTAX | prices | Tipo 1 — API OData | Giornaliero |
+| 11 | ECB Data Portal | prices | Tipo 1 — API SDMX | Giornaliero |
+| 12 | NASA FIRMS | environment | Tipo 1 — API JSON | Ogni ora |
+| 13 | NOAA ENSO Index | environment | Tipo 3 — file download | Mensile |
 
 ---
 
 ## Tipi di connettore
 
-- **Tipo 1 — API REST JSON:** fetch HTTP GET → aggiungi 3 campi fissi → salva in MongoDB as-is. Zero LLM.
-- **Tipo 2 — RSS feed:** feedparser → estrai titolo + link + testo → embedding in Qdrant + metadati in MongoDB. Zero LLM.
-- **Tipo 3 — Bulk file download:** HTTP GET → pandas/openpyxl → estrai righe rilevanti → salva in MongoDB. Zero LLM.
-- **Tipo 4 — PDF:** pdfplumber estrae testo → Claude Haiku struttura JSON → salva JSON in MongoDB + embedding in Qdrant.
-- **Tipo 5 — API testuale con news:** fetch API → Claude Haiku estrae segnali → salva metadati in MongoDB + embedding in Qdrant.
+- **Tipo 1 — API REST JSON:** fetch HTTP GET → aggiungi 4 campi fissi → salva in MongoDB as-is. Zero LLM.
+- **Tipo 3 — Bulk file download:** HTTP GET → estrai righe rilevanti → salva in MongoDB. Zero LLM.
+- **Tipo 4 — PDF:** estrai testo → OpenAI struttura JSON → salva JSON in MongoDB + embedding in Qdrant.
+- **Tipo 5 — API testuale con news:** fetch API → OpenAI estrae segnali → salva metadati in MongoDB + embedding in Qdrant.
+
+**Nota:** LLM usato nei connettori è OpenAI (gpt-5.4 / gpt-5.4-mini / gpt-5-mini), non Claude Haiku. Claude Haiku/Sonnet è usato solo nel Layer 2 (agenti Python).
+
+**Port Congestion:** microservizio interno `ais-port-probe` (container Docker `docker/ais-port-probe/`) che espone `http://ais-port-probe:8080/snapshot`. Salva in `raw_geo` + embedding in Qdrant `geo_texts`.
 
 ---
 
@@ -144,23 +150,42 @@ class AgentState(TypedDict):
 ## Struttura directory
 
 ```
-lavazza-coffee-agent/
-├── ingestion/
-│   └── connectors/          # script Python standalone per test connettori
-├── agents/
-│   ├── state.py             # AgentState TypedDict
-│   ├── orchestrator.py      # grafo LangGraph principale
-│   ├── geo_agent.py
-│   ├── environment_agent.py
-│   ├── crops_agent.py
-│   ├── prices_agent.py
-│   └── report_node.py       # generate_report con Claude Sonnet
+Lavazza-IFAB-Challenge/
+├── lavazza-coffee-agent/
+│   ├── agents/
+│   │   ├── state.py             # AgentState TypedDict
+│   │   ├── orchestrator.py      # grafo LangGraph principale
+│   │   ├── geo_agent.py
+│   │   ├── environment_agent.py
+│   │   ├── crops_agent.py
+│   │   ├── prices_agent.py
+│   │   └── report_node.py       # generate_report con Claude Sonnet
+│   ├── utils/
+│   │   ├── db.py                # helper MongoDB
+│   │   ├── geo_utils.py         # tagging geospaziale fuochi (L2 comuni caffè)
+│   │   ├── qdrant.py            # helper Qdrant
+│   │   ├── llm_analyzer.py      # wrapper Claude Haiku/Sonnet
+│   │   └── split_doc.py         # chunking documenti lunghi
+│   └── dashboard/
+│       └── app.py               # Streamlit app (Layer 2)
 ├── dashboard/
-│   └── app.py               # Streamlit app
+│   └── dashboard.py             # Streamlit alternativo (standalone)
+├── data_sources/                # script Python standalone test connettori
+│   ├── colture/conab/
+│   ├── colture/faostat/
+│   ├── colture/usda/
+│   ├── geo/gdelt/
+│   └── prices/world_bank/
+├── scripts/
+│   └── setup_coffee_regions.py  # popola MongoDB coffee_regions (IBGE L1+L2)
 ├── docker/
-│   └── compose.yml          # MongoDB + Qdrant
-├── .env.example
-└── requirements.txt
+│   ├── compose.yml              # MongoDB + Qdrant + n8n + ais-port-probe
+│   ├── ais-port-probe/          # microservizio interno congestionamento porti
+│   └── local-files/
+│       └── workflows/
+│           ├── split/           # 13 sub-workflow n8n (JSON)
+│           └── Lavazza-MASTER-RUN.json
+└── CLAUDE.md
 ```
 
 ---
@@ -196,8 +221,9 @@ Credenziali MongoDB in `docker/.env`.
 |------------|-------|
 | n8n | Scheduling workflow ingestion (Docker) |
 | LangGraph | Grafo agenti Python |
-| Claude Haiku | Extraction connettori Tipo 4/5 e sub-agenti geo/crops |
-| Claude Sonnet | Nodo generate_report |
+| OpenAI gpt-5.4 / gpt-5.4-mini / gpt-5-mini | Extraction n8n connettori Tipo 4/5 |
+| Claude Haiku | Sub-agenti geo/crops (Layer 2 Python) |
+| Claude Sonnet | Nodo generate_report (Layer 2 Python) |
 | MongoDB 7 | Storage dati grezzi schemaless (Docker) |
 | Qdrant | Vector store (Docker) |
 | Streamlit | Dashboard prototipo |
@@ -217,4 +243,15 @@ Credenziali MongoDB in `docker/.env`.
 - No Vietnam — solo Brasile nella fase 1
 - No meteo operativo (Open-Meteo escluso)
 - No Gov.br RSS — feed fermo al 2023, scartato
-- No FAOSTAT, no ICO — escluse dalla fase 1
+- No ICO — esclusa dalla fase 1
+- No WTO RSS classico — sostituito da WTO News (Tipo 5, con estrazione OpenAI)
+- **FAOSTAT QCL è attivo** (contrariamente alla versione iniziale del doc) — incluso come fonte colture
+
+## n8n — note implementative
+
+- Tutti i sub-workflow usano `executeWorkflowTrigger` come entry point (obbligatorio per Master Run)
+- Nessun sub-workflow ha nodi `Webhook Trigger` o `Respond to Webhook` (incompatibili con `executeWorkflow`)
+- Master Run chiama i 13 sub-workflow in **catena seriale** con `waitForSubWorkflow: true` e `continueOnFail: true`
+- `workflowId` nel Master Run usa formato `{__rl: true, value: "<id>", mode: "id"}`
+- MongoDB dedup: indice `{source:1, collected_period:1}` con `partialFilterExpression: {collected_period: {$exists: true, $type: "string"}}` su tutte e 4 le collection raw_*
+- MongoDB `coffee_regions`: collection con poligoni GeoJSON + indice 2dsphere, popolata da `scripts/setup_coffee_regions.py` (1 run manuale)

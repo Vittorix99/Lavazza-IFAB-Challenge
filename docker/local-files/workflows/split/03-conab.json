@@ -178,15 +178,16 @@
         -3840
       ],
       "id": "conab-ai-signals-chain-node",
-      "name": "CONAB AI Signals"
+      "name": "CONAB AI Signals",
+      "continueOnFail": true
     },
     {
       "parameters": {
         "model": {
           "__rl": true,
-          "value": "gpt-5.4",
+          "value": "gpt-4o",
           "mode": "list",
-          "cachedResultName": "gpt-5.4"
+          "cachedResultName": "gpt-4o"
         },
         "builtInTools": {},
         "options": {
@@ -207,11 +208,12 @@
           "id": "0Vum5STk59lUOybm",
           "name": "OpenAi account"
         }
-      }
+      },
+      "continueOnFail": true
     },
     {
       "parameters": {
-        "jsCode": "const parsed = JSON.parse(($json.text || '').trim());\nconst base = $('CONAB Parse Table').item.json;\nconst pdfSource = $('CONAB Extract PDF').item.json;\nconst pdfText = String(pdfSource.text ?? pdfSource.content ?? pdfSource.data ?? JSON.stringify(pdfSource)).replace(/\\s+/g, ' ').trim();\nconst excerpt = pdfText.slice(0, 3000);\nconst pdfExcerpt = pdfText.slice(0, 6000);\nconst embedText = [parsed.summary_en || '', ...(Array.isArray(parsed.signals) ? parsed.signals : []), excerpt.slice(0, 1200)].filter(Boolean).join(' ');\n\nreturn [{\n  json: {\n    ...base,\n    pdf_excerpt: pdfExcerpt,\n    source_format: 'html_index+xls+pdf',\n    source_url: base.source_url || base.index_url || base.levantamento_url || base.pdf_url || null,\n    movement_label: parsed.movement_label || 'mixed',\nsignals: Array.isArray(parsed.signals) ? parsed.signals : [],\n    summary_en: parsed.summary_en || '',\n    report_text_excerpt: excerpt,\n    embed_text: embedText\n  }\n}];"
+        "jsCode": "const rawText = ($json.text || '').trim();\nconst cleaned = rawText.replace(/^```json\\s*/i,'').replace(/^```\\s*/i,'').replace(/```$/i,'').trim();\nconst parsed = JSON.parse(cleaned || '{}');\nconst base = $('CONAB Parse Table').item.json;\nconst pdfSource = $('CONAB Extract PDF').item.json;\nconst pdfText = String(pdfSource.text ?? pdfSource.content ?? pdfSource.data ?? JSON.stringify(pdfSource)).replace(/\\s+/g, ' ').trim();\nconst excerpt = pdfText.slice(0, 3000);\nconst pdfExcerpt = pdfText.slice(0, 6000);\nconst embedText = [parsed.summary_en || '', ...(Array.isArray(parsed.signals) ? parsed.signals : []), excerpt.slice(0, 1200)].filter(Boolean).join(' ');\n\nreturn [{\n  json: {\n    ...base,\n    pdf_excerpt: pdfExcerpt,\n    source_format: 'html_index+xls+pdf',\n    source_url: base.source_url || base.index_url || base.levantamento_url || base.pdf_url || null,\n    movement_label: parsed.movement_label || 'mixed',\nsignals: Array.isArray(parsed.signals) ? parsed.signals : [],\n    summary_en: parsed.summary_en || '',\n    report_text_excerpt: excerpt,\n    embed_text: embedText\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -348,13 +350,9 @@
     },
     {
       "parameters": {
-        "operation": "upsert",
+        "operation": "insert",
         "collection": "ingestion_log",
-        "options": {
-          "upsert": true
-        },
-        "fields": "source,country,macroarea,cadenza,run_date,status,completed_at,report_period,survey_number,season,market_year,latest_year,quote_date,total_detections,latest_period,enso_phase,items_ingested,ports_monitored",
-        "filter": "{ \"source\": \"CONAB_CAFE_SAFRA\", \"country\": \"BR\", \"run_date\": {{ $json.run_date }} }"
+        "fields": "source,country,macroarea,cadenza,run_date,status,completed_at"
       },
       "type": "n8n-nodes-base.mongoDb",
       "typeVersion": 1,
@@ -485,6 +483,17 @@
         },
         "options": {}
       }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2240,
+        -3832
+      ],
+      "id": "execute-workflow-trigger-2CzBgXVD",
+      "name": "Execute Workflow Trigger"
     }
   ],
   "pinData": {},

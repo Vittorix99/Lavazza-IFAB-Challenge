@@ -1,471 +1,478 @@
-[
-  {
-    "name": "Lavazza - NASA FIRMS",
-    "nodes": [
-      {
-        "parameters": {},
-        "type": "n8n-nodes-base.manualTrigger",
-        "typeVersion": 1,
-        "position": [
-          -2000,
-          -1380
-        ],
-        "id": "manual-trigger-nasa",
-        "name": "Manual Trigger"
+{
+  "name": "Lavazza - NASA FIRMS",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2000,
+        -1380
+      ],
+      "id": "manual-trigger-nasa",
+      "name": "Manual Trigger"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 * * * *"
+            }
+          ]
+        }
       },
-      {
-        "parameters": {
-          "rule": {
-            "interval": [
-              {
-                "field": "cronExpression",
-                "expression": "0 * * * *"
-              }
-            ]
-          }
-        },
-        "type": "n8n-nodes-base.scheduleTrigger",
-        "typeVersion": 1.2,
-        "position": [
-          -2000,
-          -1260
-        ],
-        "id": "schedule-trigger-nasa",
-        "name": "Schedule Trigger"
-      },
-      {
-        "parameters": {
-          "url": "={{ 'https://firms.modaps.eosdis.nasa.gov/api/area/csv/' + $env.NASA_FIRMS_KEY + '/VIIRS_SNPP_NRT/-75,-35,-33,6/5' }}",
-          "options": {
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -2000,
+        -1260
+      ],
+      "id": "schedule-trigger-nasa",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "url": "={{ 'https://firms.modaps.eosdis.nasa.gov/api/area/csv/' + $env.NASA_FIRMS_KEY + '/VIIRS_SNPP_NRT/-75,-35,-33,6/5' }}",
+        "options": {
+          "response": {
             "response": {
-              "response": {
-                "responseFormat": "text"
-              }
-            },
-            "timeout": 60000
-          }
-        },
-        "type": "n8n-nodes-base.httpRequest",
-        "typeVersion": 4.4,
-        "position": [
-          -1600,
-          -1320
-        ],
-        "id": "nasa-firms-download-node",
-        "name": "NASA FIRMS Download",
-        "continueOnFail": true
-      },
-      {
-        "parameters": {
-          "mode": "runOnceForAllItems",
-          "jsCode": "function getCollectedPeriod(isoTs, cadenza) {\n  const d = new Date(isoTs || new Date().toISOString());\n  const pad = n => String(n).padStart(2, '0');\n  const yyyy = d.getUTCFullYear();\n  const mm = pad(d.getUTCMonth() + 1);\n  const dd = pad(d.getUTCDate());\n  const hh = pad(d.getUTCHours());\n  const doy = Math.floor((d - new Date(Date.UTC(yyyy,0,1))) / 86400000);\n  const week = pad(Math.ceil((doy + new Date(Date.UTC(yyyy,0,1)).getUTCDay() + 1) / 7));\n  switch((cadenza||'').toLowerCase()) {\n    case 'hourly':  return `${yyyy}-${mm}-${dd}T${hh}`;\n    case 'daily':   return `${yyyy}-${mm}-${dd}`;\n    case 'weekly':  return `${yyyy}-W${week}`;\n    case 'monthly': return `${yyyy}-${mm}`;\n    default:        return `${yyyy}-${mm}-${dd}`;\n  }\n}\nconst now = new Date().toISOString();\nconst _collectedPeriod = getCollectedPeriod(now, 'hourly');\nconst expectedFreshnessHours = 3;\nconst isFresh = (new Date() - new Date(now)) / 3600000 < expectedFreshnessHours;\n\nconst sensor = 'VIIRS_SNPP_NRT';\nconst lookbackDays = 5;\nconst bbox = '-75,-35,-33,6';\nconst sourceUrlTemplate = `https://firms.modaps.eosdis.nasa.gov/api/area/csv/[NASA_FIRMS_KEY]/${sensor}/${bbox}/${lookbackDays}`;\n\nfunction parseCsvLine(line) {\n  const values = [];\n  let current = '';\n  let inQuotes = false;\n\n  for (let i = 0; i < line.length; i++) {\n    const char = line[i];\n\n    if (char === '\"') {\n      if (inQuotes && line[i + 1] === '\"') {\n        current += '\"';\n        i += 1;\n      } else {\n        inQuotes = !inQuotes;\n      }\n    } else if (char === ',' && !inQuotes) {\n      values.push(current);\n      current = '';\n    } else {\n      current += char;\n    }\n  }\n\n  values.push(current);\n  return values;\n}\n\nfunction toNumber(value, decimals = 4) {\n  if (value === null || value === undefined || value === '') return null;\n  const numeric = Number(value);\n  if (Number.isNaN(numeric)) return null;\n  return Number(numeric.toFixed(decimals));\n}\n\nfunction buildDetectionUtc(acqDate, acqTime) {\n  if (!acqDate) return null;\n  const time = String(acqTime || '').padStart(4, '0');\n  const hh = time.slice(0, 2);\n  const mm = time.slice(2, 4);\n  return `${acqDate}T${hh}:${mm}:00Z`;\n}\n\nfunction percentile(sortedValues, p) {\n  if (!sortedValues.length) return null;\n  const index = Math.min(sortedValues.length - 1, Math.max(0, Math.ceil(sortedValues.length * p) - 1));\n  return Number(sortedValues[index].toFixed(2));\n}\n\nconst lines = raw.split(/\\r?\\n/).filter((line) => line.trim() !== '');\nif (!lines.length) {\n  throw new Error('NASA FIRMS response is empty');\n}\n\nconst headers = parseCsvLine(lines[0]).map((header) => header.trim());\nconst requiredHeaders = ['latitude', 'longitude', 'acq_date', 'acq_time', 'frp'];\nfor (const header of requiredHeaders) {\n  if (!headers.includes(header)) {\n    throw new Error(`Unexpected NASA FIRMS CSV schema: missing ${header}`);\n  }\n}\n\nconst numericFields = new Set(['latitude', 'longitude', 'bright_ti4', 'bright_ti5', 'scan', 'track', 'frp']);\n\nconst detections = lines.slice(1).map((line) => {\n  const values = parseCsvLine(line);\n  const row = {};\n\n  headers.forEach((header, index) => {\n    const rawValue = (values[index] ?? '').trim();\n    row[header] = numericFields.has(header) ? toNumber(rawValue) : rawValue;\n  });\n\n  row.acq_time = String(row.acq_time || '').padStart(4, '0');\n  row.detection_utc = buildDetectionUtc(row.acq_date, row.acq_time);\n\n  return row;\n}).filter((row) => row.latitude !== null && row.longitude !== null && row.acq_date);\n\nconst totalDetections = detections.length;\nconst detectionsByDay = {};\nconst confidenceCounts = {};\nconst daynightCounts = {};\nconst satelliteCounts = {};\n\nfor (const detection of detections) {\n  const acqDate = detection.acq_date || 'unknown';\n  const confidence = String(detection.confidence || 'unknown');\n  const daynight = String(detection.daynight || 'unknown');\n  const satellite = String(detection.satellite || 'unknown');\n\n  detectionsByDay[acqDate] = (detectionsByDay[acqDate] || 0) + 1;\n  confidenceCounts[confidence] = (confidenceCounts[confidence] || 0) + 1;\n  daynightCounts[daynight] = (daynightCounts[daynight] || 0) + 1;\n  satelliteCounts[satellite] = (satelliteCounts[satellite] || 0) + 1;\n}\n\nconst frpValues = detections.map((detection) => detection.frp).filter((value) => typeof value === 'number');\nconst sortedFrpValues = [...frpValues].sort((a, b) => a - b);\nconst frpSum = frpValues.reduce((sum, value) => sum + value, 0);\nconst maxFrp = sortedFrpValues.length ? Number(sortedFrpValues[sortedFrpValues.length - 1].toFixed(2)) : null;\nconst minFrp = sortedFrpValues.length ? Number(sortedFrpValues[0].toFixed(2)) : null;\nconst avgFrp = sortedFrpValues.length ? Number((frpSum / sortedFrpValues.length).toFixed(2)) : null;\nconst p95Frp = percentile(sortedFrpValues, 0.95);\nconst smallFrpLt50Count = frpValues.filter((value) => value < 50).length;\nconst extremeFrpGte500Count = frpValues.filter((value) => value >= 500).length;\n\nconst detectionUtcValues = detections.map((detection) => detection.detection_utc).filter(Boolean).sort();\nconst earliestDetectionUtc = detectionUtcValues.length ? detectionUtcValues[0] : null;\nconst latestDetectionUtc = detectionUtcValues.length ? detectionUtcValues[detectionUtcValues.length - 1] : null;\nconst latestDay = Object.keys(detectionsByDay).sort().slice(-1)[0] || null;\nconst latestDayCount = latestDay ? detectionsByDay[latestDay] : 0;\n\nconst topDetectionsByFrp = [...detections]\n  .filter((detection) => typeof detection.frp === 'number')\n  .sort((a, b) => b.frp - a.frp)\n  .slice(0, 20)\n  .map((detection) => ({\n    latitude: detection.latitude,\n    longitude: detection.longitude,\n    acq_date: detection.acq_date,\n    acq_time: detection.acq_time,\n    detection_utc: detection.detection_utc,\n    frp: detection.frp,\n    confidence: detection.confidence || null,\n    daynight: detection.daynight || null,\n    satellite: detection.satellite || null,\n    instrument: detection.instrument || null,\n    bright_ti4: detection.bright_ti4 ?? null,\n    bright_ti5: detection.bright_ti5 ?? null\n  }));\n\nconst topDays = Object.entries(detectionsByDay)\n  .sort((a, b) => b[1] - a[1])\n  .slice(0, 10)\n  .map(([date, count]) => ({ date, count }));\n\nlet summaryEn = `NASA FIRMS returned ${totalDetections} fire detections in the Brazil bounding box over the last ${lookbackDays} days.`;\nconst signals = [`${totalDetections} FIRMS detections in Brazil bbox over ${lookbackDays} days`];\n\nif (totalDetections > 0) {\n  summaryEn += ` Max FRP was ${maxFrp ?? 'n/a'} MW, ${extremeFrpGte500Count} detections were at or above 500 MW, and the latest detection timestamp was ${latestDetectionUtc || 'n/a'}.`;\n  signals.push(`Max FRP ${maxFrp ?? 'n/a'} MW`);\n  signals.push(`${extremeFrpGte500Count} detections at or above 500 MW`);\n  if (latestDay) {\n    signals.push(`${latestDayCount} detections on latest day ${latestDay}`);\n  }\n} else {\n  summaryEn += ' No active fire detections were returned for the configured area and lookback window.';\n  signals.push('No detections returned in current FIRMS query window');\n}\n\nreturn [{\n  json: {\n    source: 'NASA_FIRMS',\n    source_format: 'csv',\n    source_url_template: sourceUrlTemplate,\n    source_url: sourceUrlTemplate,\n    country: 'BR',\n    macroarea: 'environment',\n    collected_at: now,\n    collected_period: _collectedPeriod,\n        is_fresh: isFresh,\n    sensor,\n    bbox,\n    lookback_days: lookbackDays,\n    records_schema: headers,\n    total_detections: totalDetections,\n    earliest_detection_utc: earliestDetectionUtc,\n    latest_detection_utc: latestDetectionUtc,\n    latest_day: latestDay,\n    latest_day_count: latestDayCount,\n    detections_by_day: detectionsByDay,\n    top_days_by_detection_count: topDays,\n    confidence_counts: confidenceCounts,\n    daynight_counts: daynightCounts,\n    satellite_counts: satelliteCounts,\n    frp_stats: {\n      min_mw: minFrp,\n      avg_mw: avgFrp,\n      max_mw: maxFrp,\n      p95_mw: p95Frp,\n      small_lt_50_count: smallFrpLt50Count,\n      extreme_gte_500_count: extremeFrpGte500Count\n    },\n    top_detections_by_frp: topDetectionsByFrp,\n    summary_en: summaryEn,\n    signals,\n    detections,\n    _chart_fields: [\"detections\", \"detections_by_day\", \"top_detections_by_frp\"]\n  }\n}];"
-        },
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [
-          -1360,
-          -1320
-        ],
-        "id": "nasa-firms-parse-node",
-        "name": "NASA FIRMS Parse"
-      },
-      {
-        "parameters": {
-          "operation": "insert",
-          "collection": "raw_environment",
-          "options": {},
-          "fields": "source,source_url,source_format,source_url_template,country,macroarea,collected_at,sensor,bbox,lookback_days,records_schema,total_detections,earliest_detection_utc,latest_detection_utc,latest_day,latest_day_count,detections_by_day,top_days_by_detection_count,confidence_counts,daynight_counts,satellite_counts,frp_stats,top_detections_by_frp,summary_en,signals,detections"
-        },
-        "type": "n8n-nodes-base.mongoDb",
-        "typeVersion": 1,
-        "position": [
-          -640,
-          -1320
-        ],
-        "id": "nasa-mongo-raw-environment-node",
-        "name": "NASA MongoDB raw_environment",
-        "credentials": {
-          "mongoDb": {
-            "id": "Jo4ZHZCY4HM8JRrD",
-            "name": "MongoDB account"
-          }
-        }
-      },
-      {
-        "parameters": {
-          "mode": "runOnceForAllItems",
-          "jsCode": "const now = new Date().toISOString();\nconst meta = $('NASA Parse Signals').item.json;\n\nreturn [{\n  json: {\n    source: 'NASA_FIRMS',\n    country: 'BR',\n    macroarea: 'environment',\n    cadenza: 'hourly',\n    run_date: now,\n    status: 'done',\n    completed_at: now,\n    total_detections: meta.total_detections || null,\n  },\n}];"
-        },
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [
-          -400,
-          -1320
-        ],
-        "id": "nasa-build-log-node",
-        "name": "NASA Build Ingestion Log"
-      },
-      {
-        "parameters": {
-          "operation": "upsert",
-          "collection": "ingestion_log",
-          "options": {
-            "upsert": true
+              "responseFormat": "text"
+            }
           },
-          "fields": "source,country,macroarea,cadenza,run_date,status,completed_at,report_period,survey_number,season,market_year,latest_year,quote_date,total_detections,latest_period,enso_phase,items_ingested,ports_monitored",
-          "filter": "{ \"source\": \"NASA_FIRMS\", \"country\": \"BR\", \"run_date\": {{ $json.run_date }} }"
-        },
-        "type": "n8n-nodes-base.mongoDb",
-        "typeVersion": 1,
-        "position": [
-          -160,
-          -1320
-        ],
-        "id": "nasa-mongo-log-node",
-        "name": "NASA MongoDB ingestion_log",
-        "credentials": {
-          "mongoDb": {
-            "id": "Jo4ZHZCY4HM8JRrD",
-            "name": "MongoDB account"
-          }
+          "timeout": 60000
         }
       },
-      {
-        "parameters": {
-          "promptType": "define",
-          "text": "={{ JSON.stringify({ lookback_days: $json.lookback_days, total_detections: $json.total_detections, latest_day: $json.latest_day, latest_day_count: $json.latest_day_count, frp_stats: $json.frp_stats, confidence_counts: $json.confidence_counts, movement_label: $json.movement_label, rule_based_signals: $json.signals, fallback_summary_en: $json.summary_en }, null, 2) }}",
-          "messages": {
-            "messageValues": [
-              {
-                "message": "You are interpreting NASA FIRMS fire detection data for Brazil for a Lavazza coffee intelligence system. Brazilian coffee regions: Minas Gerais, Espírito Santo, Bahia, Rondônia. FRP (Fire Radiative Power in MW) indicates fire intensity. Peak season is July-October. Describe what is observed factually — do not judge if it threatens crops without evidence.\n\nOutput format:\n{\n  \"movement_label\": \"...\",\n  \"signals\": [\"...\"],\n  \"summary_en\": \"...\"\n}\n\nmovement_label options: fire_alert_high|fire_alert_medium|fire_activity_low|fire_activity_normal\nRules:\n- signals: max 5 short English strings describing observable facts\n- DO NOT assign positive/negative valence — just describe what is happening\n- movement_label: one concise label describing the current situation\n- summary_en: 1-2 English sentences, factual only\n- return JSON only, no extra text"
-              }
-            ]
-          },
-          "batching": {}
-        },
-        "type": "@n8n/n8n-nodes-langchain.chainLlm",
-        "typeVersion": 1.5,
-        "position": [
-          -1120,
-          -1320
-        ],
-        "id": "nasa-ai-signals-node",
-        "name": "NASA AI Signals"
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -1600,
+        -1320
+      ],
+      "id": "nasa-firms-download-node",
+      "name": "NASA FIRMS Download",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const raw = $input.first().json.data || '';\nfunction getCollectedPeriod(isoTs, cadenza) {\n  const d = new Date(isoTs || new Date().toISOString());\n  const pad = n => String(n).padStart(2, '0');\n  const yyyy = d.getUTCFullYear();\n  const mm = pad(d.getUTCMonth() + 1);\n  const dd = pad(d.getUTCDate());\n  const hh = pad(d.getUTCHours());\n  const doy = Math.floor((d - new Date(Date.UTC(yyyy,0,1))) / 86400000);\n  const week = pad(Math.ceil((doy + new Date(Date.UTC(yyyy,0,1)).getUTCDay() + 1) / 7));\n  switch((cadenza||'').toLowerCase()) {\n    case 'hourly':  return `${yyyy}-${mm}-${dd}T${hh}`;\n    case 'daily':   return `${yyyy}-${mm}-${dd}`;\n    case 'weekly':  return `${yyyy}-W${week}`;\n    case 'monthly': return `${yyyy}-${mm}`;\n    default:        return `${yyyy}-${mm}-${dd}`;\n  }\n}\nconst now = new Date().toISOString();\nconst _collectedPeriod = getCollectedPeriod(now, 'hourly');\nconst expectedFreshnessHours = 3;\nconst isFresh = (new Date() - new Date(now)) / 3600000 < expectedFreshnessHours;\n\nconst sensor = 'VIIRS_SNPP_NRT';\nconst lookbackDays = 5;\nconst bbox = '-75,-35,-33,6';\nconst sourceUrlTemplate = `https://firms.modaps.eosdis.nasa.gov/api/area/csv/[NASA_FIRMS_KEY]/${sensor}/${bbox}/${lookbackDays}`;\n\nfunction parseCsvLine(line) {\n  const values = [];\n  let current = '';\n  let inQuotes = false;\n\n  for (let i = 0; i < line.length; i++) {\n    const char = line[i];\n\n    if (char === '\"') {\n      if (inQuotes && line[i + 1] === '\"') {\n        current += '\"';\n        i += 1;\n      } else {\n        inQuotes = !inQuotes;\n      }\n    } else if (char === ',' && !inQuotes) {\n      values.push(current);\n      current = '';\n    } else {\n      current += char;\n    }\n  }\n\n  values.push(current);\n  return values;\n}\n\nfunction toNumber(value, decimals = 4) {\n  if (value === null || value === undefined || value === '') return null;\n  const numeric = Number(value);\n  if (Number.isNaN(numeric)) return null;\n  return Number(numeric.toFixed(decimals));\n}\n\nfunction buildDetectionUtc(acqDate, acqTime) {\n  if (!acqDate) return null;\n  const time = String(acqTime || '').padStart(4, '0');\n  const hh = time.slice(0, 2);\n  const mm = time.slice(2, 4);\n  return `${acqDate}T${hh}:${mm}:00Z`;\n}\n\nfunction percentile(sortedValues, p) {\n  if (!sortedValues.length) return null;\n  const index = Math.min(sortedValues.length - 1, Math.max(0, Math.ceil(sortedValues.length * p) - 1));\n  return Number(sortedValues[index].toFixed(2));\n}\n\nconst lines = raw.split(/\\r?\\n/).filter((line) => line.trim() !== '');\nif (!lines.length) {\n  throw new Error('NASA FIRMS response is empty');\n}\n\nconst headers = parseCsvLine(lines[0]).map((header) => header.trim());\nconst requiredHeaders = ['latitude', 'longitude', 'acq_date', 'acq_time', 'frp'];\nfor (const header of requiredHeaders) {\n  if (!headers.includes(header)) {\n    throw new Error(`Unexpected NASA FIRMS CSV schema: missing ${header}`);\n  }\n}\n\nconst numericFields = new Set(['latitude', 'longitude', 'bright_ti4', 'bright_ti5', 'scan', 'track', 'frp']);\n\nconst detections = lines.slice(1).map((line) => {\n  const values = parseCsvLine(line);\n  const row = {};\n\n  headers.forEach((header, index) => {\n    const rawValue = (values[index] ?? '').trim();\n    row[header] = numericFields.has(header) ? toNumber(rawValue) : rawValue;\n  });\n\n  row.acq_time = String(row.acq_time || '').padStart(4, '0');\n  row.detection_utc = buildDetectionUtc(row.acq_date, row.acq_time);\n\n  return row;\n}).filter((row) => row.latitude !== null && row.longitude !== null && row.acq_date);\n\nconst totalDetections = detections.length;\nconst detectionsByDay = {};\nconst confidenceCounts = {};\nconst daynightCounts = {};\nconst satelliteCounts = {};\n\nfor (const detection of detections) {\n  const acqDate = detection.acq_date || 'unknown';\n  const confidence = String(detection.confidence || 'unknown');\n  const daynight = String(detection.daynight || 'unknown');\n  const satellite = String(detection.satellite || 'unknown');\n\n  detectionsByDay[acqDate] = (detectionsByDay[acqDate] || 0) + 1;\n  confidenceCounts[confidence] = (confidenceCounts[confidence] || 0) + 1;\n  daynightCounts[daynight] = (daynightCounts[daynight] || 0) + 1;\n  satelliteCounts[satellite] = (satelliteCounts[satellite] || 0) + 1;\n}\n\nconst frpValues = detections.map((detection) => detection.frp).filter((value) => typeof value === 'number');\nconst sortedFrpValues = [...frpValues].sort((a, b) => a - b);\nconst frpSum = frpValues.reduce((sum, value) => sum + value, 0);\nconst maxFrp = sortedFrpValues.length ? Number(sortedFrpValues[sortedFrpValues.length - 1].toFixed(2)) : null;\nconst minFrp = sortedFrpValues.length ? Number(sortedFrpValues[0].toFixed(2)) : null;\nconst avgFrp = sortedFrpValues.length ? Number((frpSum / sortedFrpValues.length).toFixed(2)) : null;\nconst p95Frp = percentile(sortedFrpValues, 0.95);\nconst smallFrpLt50Count = frpValues.filter((value) => value < 50).length;\nconst extremeFrpGte500Count = frpValues.filter((value) => value >= 500).length;\n\nconst detectionUtcValues = detections.map((detection) => detection.detection_utc).filter(Boolean).sort();\nconst earliestDetectionUtc = detectionUtcValues.length ? detectionUtcValues[0] : null;\nconst latestDetectionUtc = detectionUtcValues.length ? detectionUtcValues[detectionUtcValues.length - 1] : null;\nconst latestDay = Object.keys(detectionsByDay).sort().slice(-1)[0] || null;\nconst latestDayCount = latestDay ? detectionsByDay[latestDay] : 0;\n\nconst topDetectionsByFrp = [...detections]\n  .filter((detection) => typeof detection.frp === 'number')\n  .sort((a, b) => b.frp - a.frp)\n  .slice(0, 20)\n  .map((detection) => ({\n    latitude: detection.latitude,\n    longitude: detection.longitude,\n    acq_date: detection.acq_date,\n    acq_time: detection.acq_time,\n    detection_utc: detection.detection_utc,\n    frp: detection.frp,\n    confidence: detection.confidence || null,\n    daynight: detection.daynight || null,\n    satellite: detection.satellite || null,\n    instrument: detection.instrument || null,\n    bright_ti4: detection.bright_ti4 ?? null,\n    bright_ti5: detection.bright_ti5 ?? null\n  }));\n\nconst topDays = Object.entries(detectionsByDay)\n  .sort((a, b) => b[1] - a[1])\n  .slice(0, 10)\n  .map(([date, count]) => ({ date, count }));\n\nlet summaryEn = `NASA FIRMS returned ${totalDetections} fire detections in the Brazil bounding box over the last ${lookbackDays} days.`;\nconst signals = [`${totalDetections} FIRMS detections in Brazil bbox over ${lookbackDays} days`];\n\nif (totalDetections > 0) {\n  summaryEn += ` Max FRP was ${maxFrp ?? 'n/a'} MW, ${extremeFrpGte500Count} detections were at or above 500 MW, and the latest detection timestamp was ${latestDetectionUtc || 'n/a'}.`;\n  signals.push(`Max FRP ${maxFrp ?? 'n/a'} MW`);\n  signals.push(`${extremeFrpGte500Count} detections at or above 500 MW`);\n  if (latestDay) {\n    signals.push(`${latestDayCount} detections on latest day ${latestDay}`);\n  }\n} else {\n  summaryEn += ' No active fire detections were returned for the configured area and lookback window.';\n  signals.push('No detections returned in current FIRMS query window');\n}\n\nreturn [{\n  json: {\n    source: 'NASA_FIRMS',\n    source_format: 'csv',\n    source_url_template: sourceUrlTemplate,\n    source_url: sourceUrlTemplate,\n    country: 'BR',\n    macroarea: 'environment',\n    collected_at: now,\n    collected_period: _collectedPeriod,\n        is_fresh: isFresh,\n    sensor,\n    bbox,\n    lookback_days: lookbackDays,\n    records_schema: headers,\n    total_detections: totalDetections,\n    earliest_detection_utc: earliestDetectionUtc,\n    latest_detection_utc: latestDetectionUtc,\n    latest_day: latestDay,\n    latest_day_count: latestDayCount,\n    detections_by_day: detectionsByDay,\n    top_days_by_detection_count: topDays,\n    confidence_counts: confidenceCounts,\n    daynight_counts: daynightCounts,\n    satellite_counts: satelliteCounts,\n    frp_stats: {\n      min_mw: minFrp,\n      avg_mw: avgFrp,\n      max_mw: maxFrp,\n      p95_mw: p95Frp,\n      small_lt_50_count: smallFrpLt50Count,\n      extreme_gte_500_count: extremeFrpGte500Count\n    },\n    top_detections_by_frp: topDetectionsByFrp,\n    summary_en: summaryEn,\n    signals,\n    detections,\n    _chart_fields: [\"detections\", \"detections_by_day\", \"top_detections_by_frp\"]\n  }\n}];"
       },
-      {
-        "parameters": {
-          "model": {
-            "__rl": true,
-            "value": "gpt-5-mini",
-            "mode": "list",
-            "cachedResultName": "gpt-5-mini"
-          },
-          "builtInTools": {},
-          "options": {
-            "maxRetries": 2
-          }
-        },
-        "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
-        "typeVersion": 1.3,
-        "position": [
-          -1120,
-          -1120
-        ],
-        "id": "nasa-openai-signals-node",
-        "name": "NASA OpenAI Signals Model",
-        "retryOnFail": true,
-        "credentials": {
-          "openAiApi": {
-            "id": "0Vum5STk59lUOybm",
-            "name": "OpenAi account"
-          }
-        }
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1360,
+        -1320
+      ],
+      "id": "nasa-firms-parse-node",
+      "name": "NASA FIRMS Parse"
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "raw_environment",
+        "options": {},
+        "fields": "source,source_url,source_format,source_url_template,country,macroarea,collected_at,sensor,bbox,lookback_days,records_schema,total_detections,earliest_detection_utc,latest_detection_utc,latest_day,latest_day_count,detections_by_day,top_days_by_detection_count,confidence_counts,daynight_counts,satellite_counts,frp_stats,top_detections_by_frp,summary_en,signals,detections"
       },
-      {
-        "parameters": {
-          "mode": "runOnceForAllItems",
-          "jsCode": "const raw = ($json.text || '').trim();\nconst cleaned = raw.replace(/^```json\\s*/i,'').replace(/^```\\s*/i,'').replace(/```$/i,'').trim();\nconst parsed = JSON.parse(cleaned);\nconst base = $('NASA FIRMS Parse').item.json;\n\nreturn [{ json: {\n  ...base,\n  rule_based_signals: Array.isArray(base.signals) ? base.signals : [],\n  rule_based_movement_label: base.movement_label || 'mixed',\n  fallback_summary_en: base.summary_en || '',\n  movement_label: parsed.movement_label || base.movement_label || 'mixed',\n  signals: Array.isArray(parsed.signals) && parsed.signals.length ? parsed.signals : (Array.isArray(base.signals) ? base.signals : []),\n  summary_en: parsed.summary_en || base.summary_en || ''\n}}];"
-        },
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [
-          -880,
-          -1320
-        ],
-        "id": "nasa-parse-signals-node",
-        "name": "NASA Parse Signals"
-      },
-      {
-        "id": "e844effd-745a-4dc2-b63d-a8da0f684ee1",
-        "name": "Coffee Zone Tag L1",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [
-          -1120,
-          -1320
-        ],
-        "parameters": {
-          "jsCode": "// Level 1 — Bounding box stati produttori caffè Brasile\n// Veloce, zero DB, tagga ogni detection prima di passare all'AI\n\nconst COFFEE_STATES = [\n  { uf: 'MG', name: 'Minas Gerais',   latMin: -22.93, latMax: -14.23, lonMin: -51.05, lonMax: -39.85 },\n  { uf: 'SP', name: 'São Paulo',      latMin: -25.32, latMax: -19.78, lonMin: -53.11, lonMax: -44.16 },\n  { uf: 'ES', name: 'Espírito Santo', latMin: -21.31, latMax: -17.88, lonMin: -41.88, lonMax: -39.69 },\n  { uf: 'BA', name: 'Bahia',          latMin: -18.36, latMax:  -8.53, lonMin: -46.62, lonMax: -37.34 },\n  { uf: 'RO', name: 'Rondônia',       latMin: -13.70, latMax:  -7.96, lonMin: -66.80, lonMax: -59.78 },\n  { uf: 'PR', name: 'Paraná',         latMin: -26.73, latMax: -22.52, lonMin: -54.62, lonMax: -48.02 },\n];\n\nfunction findCoffeeState(lat, lon) {\n  for (const s of COFFEE_STATES) {\n    if (lat >= s.latMin && lat <= s.latMax && lon >= s.lonMin && lon <= s.lonMax) {\n      return s;\n    }\n  }\n  return null;\n}\n\nconst doc = $input.first().json;\nconst detections = Array.isArray(doc.detections) ? doc.detections : [];\n\nlet coffeeCount = 0;\nconst statesHit = new Set();\n\nconst tagged = detections.map(det => {\n  const lat = det.latitude;\n  const lon = det.longitude;\n  const match = (lat != null && lon != null) ? findCoffeeState(lat, lon) : null;\n  if (match) {\n    coffeeCount++;\n    statesHit.add(match.uf);\n  }\n  return {\n    ...det,\n    in_coffee_state: match !== null,\n    coffee_state_uf: match ? match.uf : null,\n    coffee_state_name: match ? match.name : null,\n  };\n});\n\nconst total = detections.length;\n\nreturn [{\n  json: {\n    ...doc,\n    detections: tagged,\n    l1_coffee_detections: coffeeCount,\n    l1_coffee_ratio: total > 0 ? Math.round(coffeeCount / total * 1000) / 1000 : 0,\n    l1_affected_states: [...statesHit].sort(),\n  }\n}];\n"
-        }
-      },
-      {
-        "id": "094522c5-3d4b-4bc6-bf79-0cd775c4691c",
-        "name": "API Check",
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [
-          -1380,
-          -1320
-        ],
-        "parameters": {
-          "jsCode": "const item = $input.first();\nconst err = item.json?.error ?? item.error?.message ?? '';\nconst statusCode = item.json?.statusCode ?? item.json?.status ?? 0;\nif (err || statusCode >= 400) {\n  return [{ json: {\n    _api_skip: true,\n    source: '10_NASA_FIRMS',\n    country: 'BR',\n    status: 'skipped_api_error',\n    reason: `API unavailable: ${err || 'HTTP ' + statusCode}`,\n    run_date: new Date().toISOString(),\n    completed_at: new Date().toISOString()\n  } }];\n}\nreturn [{ json: item.json }];"
-        }
-      },
-      {
-        "id": "aa73f593-fe2b-4b53-8668-308ef6c68477",
-        "name": "API Skip?",
-        "type": "n8n-nodes-base.if",
-        "typeVersion": 2,
-        "position": [
-          -1160,
-          -1320
-        ],
-        "parameters": {
-          "conditions": {
-            "options": {
-              "caseSensitive": true,
-              "leftValue": "",
-              "typeValidation": "strict"
-            },
-            "conditions": [
-              {
-                "id": "666b5299-d89e-4456-8129-88b3713d3c55",
-                "leftValue": "={{ $json._api_skip }}",
-                "rightValue": true,
-                "operator": {
-                  "type": "boolean",
-                  "operation": "equals"
-                }
-              }
-            ],
-            "combinator": "and"
-          }
-        }
-      },
-      {
-        "id": "0618b6ee-9e39-4ec4-a785-05d873e32aa4",
-        "name": "Return Status",
-        "type": "n8n-nodes-base.set",
-        "typeVersion": 3.4,
-        "position": [
-          40,
-          -1320
-        ],
-        "parameters": {
-          "mode": "manual",
-          "duplicateItem": false,
-          "assignments": {
-            "assignments": [
-              {
-                "id": "b5cc7c69-9d26-486e-b67e-7e4d603098fe",
-                "name": "workflow",
-                "value": "=10-nasa-firms",
-                "type": "string"
-              },
-              {
-                "id": "e9b4f429-17cd-41d4-9984-fd6daaf544a1",
-                "name": "status",
-                "value": "={{ $json.status || 'done' }}",
-                "type": "string"
-              },
-              {
-                "id": "bfc0e397-5f04-4394-a67d-52c850a130c3",
-                "name": "completed_at",
-                "value": "={{ new Date().toISOString() }}",
-                "type": "string"
-              }
-            ]
-          },
-          "options": {}
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        -640,
+        -1320
+      ],
+      "id": "nasa-mongo-raw-environment-node",
+      "name": "NASA MongoDB raw_environment",
+      "credentials": {
+        "mongoDb": {
+          "id": "Jo4ZHZCY4HM8JRrD",
+          "name": "MongoDB account"
         }
       }
-    ],
-    "pinData": {},
-    "connections": {
-      "NASA FIRMS Download": {
-        "main": [
-          [
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const now = new Date().toISOString();\nconst meta = $('NASA Parse Signals').item.json;\n\nreturn [{\n  json: {\n    source: 'NASA_FIRMS',\n    country: 'BR',\n    macroarea: 'environment',\n    cadenza: 'hourly',\n    run_date: now,\n    status: 'done',\n    completed_at: now,\n    total_detections: meta.total_detections || null,\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -400,
+        -1320
+      ],
+      "id": "nasa-build-log-node",
+      "name": "NASA Build Ingestion Log"
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "ingestion_log",
+        "fields": "source,country,macroarea,cadenza,run_date,status,completed_at"
+      },
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        -160,
+        -1320
+      ],
+      "id": "nasa-mongo-log-node",
+      "name": "NASA MongoDB ingestion_log",
+      "credentials": {
+        "mongoDb": {
+          "id": "Jo4ZHZCY4HM8JRrD",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ JSON.stringify({ lookback_days: $json.lookback_days, total_detections: $json.total_detections, latest_day: $json.latest_day, latest_day_count: $json.latest_day_count, frp_stats: $json.frp_stats, confidence_counts: $json.confidence_counts, movement_label: $json.movement_label, rule_based_signals: $json.signals, fallback_summary_en: $json.summary_en }, null, 2) }}",
+        "messages": {
+          "messageValues": [
             {
-              "node": "API Check",
-              "type": "main",
-              "index": 0
+              "message": "You are interpreting NASA FIRMS fire detection data for Brazil for a Lavazza coffee intelligence system. Brazilian coffee regions: Minas Gerais, Espírito Santo, Bahia, Rondônia. FRP (Fire Radiative Power in MW) indicates fire intensity. Peak season is July-October. Describe what is observed factually — do not judge if it threatens crops without evidence.\n\nOutput format:\n{\n  \"movement_label\": \"...\",\n  \"signals\": [\"...\"],\n  \"summary_en\": \"...\"\n}\n\nmovement_label options: fire_alert_high|fire_alert_medium|fire_activity_low|fire_activity_normal\nRules:\n- signals: max 5 short English strings describing observable facts\n- DO NOT assign positive/negative valence — just describe what is happening\n- movement_label: one concise label describing the current situation\n- summary_en: 1-2 English sentences, factual only\n- return JSON only, no extra text"
             }
           ]
-        ]
+        },
+        "batching": {}
       },
-      "NASA FIRMS Parse": {
-        "main": [
-          [
-            {
-              "node": "Coffee Zone Tag L1",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
+      "position": [
+        -1120,
+        -1320
+      ],
+      "id": "nasa-ai-signals-node",
+      "name": "NASA AI Signals",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {
+          "maxRetries": 2
+        }
       },
-      "NASA MongoDB raw_environment": {
-        "main": [
-          [
-            {
-              "node": "NASA Build Ingestion Log",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        -1120,
+        -1120
+      ],
+      "id": "nasa-openai-signals-node",
+      "name": "NASA OpenAI Signals Model",
+      "retryOnFail": true,
+      "credentials": {
+        "openAiApi": {
+          "id": "0Vum5STk59lUOybm",
+          "name": "OpenAi account"
+        }
       },
-      "NASA Build Ingestion Log": {
-        "main": [
-          [
-            {
-              "node": "NASA MongoDB ingestion_log",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const raw = ($json.text || '').trim();\nconst cleaned = raw.replace(/^```json\\s*/i,'').replace(/^```\\s*/i,'').replace(/```$/i,'').trim();\nconst parsed = JSON.parse(cleaned);\nconst base = $('NASA FIRMS Parse').item.json;\n\nreturn [{ json: {\n  ...base,\n  rule_based_signals: Array.isArray(base.signals) ? base.signals : [],\n  rule_based_movement_label: base.movement_label || 'mixed',\n  fallback_summary_en: base.summary_en || '',\n  movement_label: parsed.movement_label || base.movement_label || 'mixed',\n  signals: Array.isArray(parsed.signals) && parsed.signals.length ? parsed.signals : (Array.isArray(base.signals) ? base.signals : []),\n  summary_en: parsed.summary_en || base.summary_en || ''\n}}];"
       },
-      "NASA OpenAI Signals Model": {
-        "ai_languageModel": [
-          [
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -880,
+        -1320
+      ],
+      "id": "nasa-parse-signals-node",
+      "name": "NASA Parse Signals"
+    },
+    {
+      "id": "e844effd-745a-4dc2-b63d-a8da0f684ee1",
+      "name": "Coffee Zone Tag L1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1120,
+        -1320
+      ],
+      "parameters": {
+        "jsCode": "// Level 1 — Bounding box stati produttori caffè Brasile\n// Veloce, zero DB, tagga ogni detection prima di passare all'AI\n\nconst COFFEE_STATES = [\n  { uf: 'MG', name: 'Minas Gerais',   latMin: -22.93, latMax: -14.23, lonMin: -51.05, lonMax: -39.85 },\n  { uf: 'SP', name: 'São Paulo',      latMin: -25.32, latMax: -19.78, lonMin: -53.11, lonMax: -44.16 },\n  { uf: 'ES', name: 'Espírito Santo', latMin: -21.31, latMax: -17.88, lonMin: -41.88, lonMax: -39.69 },\n  { uf: 'BA', name: 'Bahia',          latMin: -18.36, latMax:  -8.53, lonMin: -46.62, lonMax: -37.34 },\n  { uf: 'RO', name: 'Rondônia',       latMin: -13.70, latMax:  -7.96, lonMin: -66.80, lonMax: -59.78 },\n  { uf: 'PR', name: 'Paraná',         latMin: -26.73, latMax: -22.52, lonMin: -54.62, lonMax: -48.02 },\n];\n\nfunction findCoffeeState(lat, lon) {\n  for (const s of COFFEE_STATES) {\n    if (lat >= s.latMin && lat <= s.latMax && lon >= s.lonMin && lon <= s.lonMax) {\n      return s;\n    }\n  }\n  return null;\n}\n\nconst doc = $input.first().json;\nconst detections = Array.isArray(doc.detections) ? doc.detections : [];\n\nlet coffeeCount = 0;\nconst statesHit = new Set();\n\nconst tagged = detections.map(det => {\n  const lat = det.latitude;\n  const lon = det.longitude;\n  const match = (lat != null && lon != null) ? findCoffeeState(lat, lon) : null;\n  if (match) {\n    coffeeCount++;\n    statesHit.add(match.uf);\n  }\n  return {\n    ...det,\n    in_coffee_state: match !== null,\n    coffee_state_uf: match ? match.uf : null,\n    coffee_state_name: match ? match.name : null,\n  };\n});\n\nconst total = detections.length;\n\nreturn [{\n  json: {\n    ...doc,\n    detections: tagged,\n    l1_coffee_detections: coffeeCount,\n    l1_coffee_ratio: total > 0 ? Math.round(coffeeCount / total * 1000) / 1000 : 0,\n    l1_affected_states: [...statesHit].sort(),\n  }\n}];\n"
+      }
+    },
+    {
+      "id": "094522c5-3d4b-4bc6-bf79-0cd775c4691c",
+      "name": "API Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1380,
+        -1320
+      ],
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst err = item.json?.error ?? item.error?.message ?? '';\nconst statusCode = item.json?.statusCode ?? item.json?.status ?? 0;\nif (err || statusCode >= 400) {\n  return [{ json: {\n    _api_skip: true,\n    source: '10_NASA_FIRMS',\n    country: 'BR',\n    status: 'skipped_api_error',\n    reason: `API unavailable: ${err || 'HTTP ' + statusCode}`,\n    run_date: new Date().toISOString(),\n    completed_at: new Date().toISOString()\n  } }];\n}\nreturn [{ json: item.json }];"
+      }
+    },
+    {
+      "id": "aa73f593-fe2b-4b53-8668-308ef6c68477",
+      "name": "API Skip?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1160,
+        -1320
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
             {
-              "node": "NASA AI Signals",
-              "type": "ai_languageModel",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "NASA AI Signals": {
-        "main": [
-          [
-            {
-              "node": "NASA Parse Signals",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "NASA Parse Signals": {
-        "main": [
-          [
-            {
-              "node": "NASA MongoDB raw_environment",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Manual Trigger": {
-        "main": [
-          [
-            {
-              "node": "NASA FIRMS Download",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Schedule Trigger": {
-        "main": [
-          [
-            {
-              "node": "NASA FIRMS Download",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Coffee Zone Tag L1": {
-        "main": [
-          [
-            {
-              "node": "NASA AI Signals",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "API Check": {
-        "main": [
-          [
-            {
-              "node": "API Skip?",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "API Skip?": {
-        "main": [
-          [
-            {
-              "node": "NASA MongoDB ingestion_log",
-              "type": "main",
-              "index": 0
+              "id": "666b5299-d89e-4456-8129-88b3713d3c55",
+              "leftValue": "={{ $json._api_skip }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
             }
           ],
-          [
-            {
-              "node": "NASA FIRMS Parse",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "NASA MongoDB ingestion_log": {
-        "main": [
-          [
-            {
-              "node": "Return Status",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Execute Workflow Trigger": {
-        "main": [
-          [
-            {
-              "node": "NASA FIRMS Download",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Return Status": {
-        "main": [
-          []
-        ]
+          "combinator": "and"
+        }
       }
     },
-    "active": false,
-    "settings": {
-      "executionOrder": "v1",
-      "binaryMode": "separate",
-      "availableInMCP": false
+    {
+      "id": "0618b6ee-9e39-4ec4-a785-05d873e32aa4",
+      "name": "Return Status",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        40,
+        -1320
+      ],
+      "parameters": {
+        "mode": "manual",
+        "duplicateItem": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b5cc7c69-9d26-486e-b67e-7e4d603098fe",
+              "name": "workflow",
+              "value": "=10-nasa-firms",
+              "type": "string"
+            },
+            {
+              "id": "e9b4f429-17cd-41d4-9984-fd6daaf544a1",
+              "name": "status",
+              "value": "={{ $json.status || 'done' }}",
+              "type": "string"
+            },
+            {
+              "id": "bfc0e397-5f04-4394-a67d-52c850a130c3",
+              "name": "completed_at",
+              "value": "={{ new Date().toISOString() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
     },
-    "tags": [],
-    "id": "Ch0PCqki7uMgVBTQ"
-  }
-]
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2240,
+        -1306
+      ],
+      "id": "execute-workflow-trigger-Ch0PCqki",
+      "name": "Execute Workflow Trigger"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "NASA FIRMS Download": {
+      "main": [
+        [
+          {
+            "node": "API Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NASA FIRMS Parse": {
+      "main": [
+        [
+          {
+            "node": "Coffee Zone Tag L1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NASA MongoDB raw_environment": {
+      "main": [
+        [
+          {
+            "node": "NASA Build Ingestion Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NASA Build Ingestion Log": {
+      "main": [
+        [
+          {
+            "node": "NASA MongoDB ingestion_log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NASA OpenAI Signals Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "NASA AI Signals",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NASA AI Signals": {
+      "main": [
+        [
+          {
+            "node": "NASA Parse Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NASA Parse Signals": {
+      "main": [
+        [
+          {
+            "node": "NASA MongoDB raw_environment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "NASA FIRMS Download",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "NASA FIRMS Download",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Coffee Zone Tag L1": {
+      "main": [
+        [
+          {
+            "node": "NASA AI Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Check": {
+      "main": [
+        [
+          {
+            "node": "API Skip?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Skip?": {
+      "main": [
+        [
+          {
+            "node": "NASA MongoDB ingestion_log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "NASA FIRMS Parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NASA MongoDB ingestion_log": {
+      "main": [
+        [
+          {
+            "node": "Return Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "NASA FIRMS Download",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Return Status": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "tags": [],
+  "id": "Ch0PCqki7uMgVBTQ"
+}

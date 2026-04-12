@@ -6,8 +6,8 @@
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
-        -2000,
-        -5020
+        -2192,
+        -5040
       ],
       "id": "manual-trigger-comex",
       "name": "Manual Trigger"
@@ -27,7 +27,7 @@
       "typeVersion": 1.2,
       "position": [
         -2000,
-        -4900
+        -4896
       ],
       "id": "schedule-trigger-comex",
       "name": "Schedule Trigger"
@@ -43,8 +43,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -1600,
-        -4960
+        -1728,
+        -5072
       ],
       "id": "comex-updated-check-node",
       "name": "Comex Updated Check",
@@ -96,8 +96,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -1120,
-        -4960
+        -1008,
+        -5136
       ],
       "id": "comex-state-series-node",
       "name": "Comex Fetch State Series Window",
@@ -135,18 +135,19 @@
       "typeVersion": 1.9,
       "position": [
         -400,
-        -5080
+        -5088
       ],
       "id": "comex-ai-signals-chain-node",
-      "name": "Comex AI Signals"
+      "name": "Comex AI Signals",
+      "continueOnFail": true
     },
     {
       "parameters": {
         "model": {
           "__rl": true,
-          "value": "gpt-5-mini",
+          "value": "gpt-4o-mini",
           "mode": "list",
-          "cachedResultName": "gpt-5-mini"
+          "cachedResultName": "gpt-4o-mini"
         },
         "builtInTools": {},
         "options": {
@@ -167,7 +168,8 @@
           "id": "0Vum5STk59lUOybm",
           "name": "OpenAi account"
         }
-      }
+      },
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -186,8 +188,8 @@
       "parameters": {
         "operation": "insert",
         "collection": "raw_crops",
-        "options": {},
-        "fields": "source,source_format,source_base_url,source_url,source_updated_date,country,macroarea,flow,collected_at,updated_reference,lookback_months,requested_lookback_months,ncm_codes,ncm_groups,latest_month,previous_month,same_month_previous_year,product_mix,focus_states,top_3_states,state_series_top_3,top_destinations,destinations_series,transport_modes_latest,transport_series,top_ports,port_data_available,derived_metrics,movement_label,signals,summary_en,recent_series,_chart_fields"
+        "fields": "source,source_format,source_base_url,source_url,source_updated_date,country,macroarea,flow,collected_at,updated_reference,lookback_months,requested_lookback_months,ncm_codes,ncm_groups,latest_month,previous_month,same_month_previous_year,product_mix,focus_states,top_3_states,state_series_top_3,top_destinations,destinations_series,transport_modes_latest,transport_series,top_ports,port_data_available,derived_metrics,movement_label,signals,summary_en,recent_series,_chart_fields",
+        "options": {}
       },
       "type": "n8n-nodes-base.mongoDb",
       "typeVersion": 1,
@@ -219,13 +221,10 @@
     },
     {
       "parameters": {
-        "operation": "upsert",
+        "operation": "insert",
         "collection": "ingestion_log",
-        "options": {
-          "upsert": true
-        },
-        "fields": "source,country,macroarea,cadenza,run_date,status,completed_at,report_period,survey_number,season,market_year,latest_year,quote_date,total_detections,latest_period,enso_phase,items_ingested,ports_monitored",
-        "filter": "{ \"source\": \"COMEX_STAT\", \"country\": \"BR\", \"run_date\": {{ $json.run_date }} }"
+        "fields": "source,country,macroarea,cadenza,run_date,status,completed_at",
+        "options": {}
       },
       "type": "n8n-nodes-base.mongoDb",
       "typeVersion": 1,
@@ -244,13 +243,12 @@
     },
     {
       "parameters": {
-        "jsCode": "const baseDelayMs = 12000;\nconst jitterMs = Math.floor(Math.random() * 2000);\nawait new Promise((resolve) => setTimeout(resolve, baseDelayMs + jitterMs));\nreturn $input.all();",
-        "mode": "runOnceForAllItems"
+        "jsCode": "const baseDelayMs = 12000;\nconst jitterMs = Math.floor(Math.random() * 2000);\nawait new Promise((resolve) => setTimeout(resolve, baseDelayMs + jitterMs));\nreturn $input.all();"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1000,
+        -1008,
         -4960
       ],
       "id": "comex-wait-node",
@@ -258,13 +256,12 @@
     },
     {
       "parameters": {
-        "jsCode": "const baseDelayMs = 12000;\nconst jitterMs = Math.floor(Math.random() * 2000);\nawait new Promise((resolve) => setTimeout(resolve, baseDelayMs + jitterMs));\nreturn $input.all();",
-        "mode": "runOnceForAllItems"
+        "jsCode": "const baseDelayMs = 12000;\nconst jitterMs = Math.floor(Math.random() * 2000);\nawait new Promise((resolve) => setTimeout(resolve, baseDelayMs + jitterMs));\nreturn $input.all();"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1240,
+        -1248,
         -4960
       ],
       "id": "comex-wait-pre-state-node",
@@ -300,7 +297,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -520,
+        -528,
         -4960
       ],
       "id": "comex-port-snapshot-node",
@@ -311,8 +308,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const baseDelayMs = 12000;\nconst jitterMs = Math.floor(Math.random() * 2000);\nawait new Promise((resolve) => setTimeout(resolve, baseDelayMs + jitterMs));\nreturn $input.all();",
-        "mode": "runOnceForAllItems"
+        "jsCode": "const baseDelayMs = 12000;\nconst jitterMs = Math.floor(Math.random() * 2000);\nawait new Promise((resolve) => setTimeout(resolve, baseDelayMs + jitterMs));\nreturn $input.all();"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -353,25 +349,24 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -760,
-        -4960
+        -848,
+        -5136
       ],
       "id": "comex-state-series-prev-tail-node",
       "name": "Comex Fetch State Series Previous Tail",
       "retryOnFail": true,
-      "maxTries": 6,
-      "waitBetweenTries": 20000
+      "maxTries": 5,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
-        "jsCode": "const baseDelayMs = 12000;\nconst jitterMs = Math.floor(Math.random() * 2000);\nawait new Promise((resolve) => setTimeout(resolve, baseDelayMs + jitterMs));\nreturn $input.all();",
-        "mode": "runOnceForAllItems"
+        "jsCode": "const baseDelayMs = 18000;\nconst jitterMs = Math.floor(Math.random() * 2000);\nawait new Promise((resolve) => setTimeout(resolve, baseDelayMs + jitterMs));\nreturn $input.all();"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -400,
-        -4960
+        -640,
+        -5168
       ],
       "id": "comex-wait-pre-port-tail-node",
       "name": "Comex Wait Pre Port Tail"
@@ -406,37 +401,29 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -280,
+        -288,
         -4960
       ],
       "id": "comex-port-snapshot-prev-tail-node",
       "name": "Comex Port Snapshot Previous Tail",
       "retryOnFail": true,
       "maxTries": 5,
-      "waitBetweenTries": 12000
+      "waitBetweenTries": 5000
     },
     {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst err = item.json?.error ?? item.error?.message ?? '';\nconst statusCode = item.json?.statusCode ?? item.json?.status ?? 0;\nif (err || statusCode >= 400) {\n  return [{ json: {\n    _api_skip: true,\n    source: '01_COMEX',\n    country: 'BR',\n    status: 'skipped_api_error',\n    reason: `API unavailable: ${err || 'HTTP ' + statusCode}`,\n    run_date: new Date().toISOString(),\n    completed_at: new Date().toISOString()\n  } }];\n}\nreturn [{ json: item.json }];"
+      },
       "id": "f00316ff-72c4-4566-8f4a-e07255a284f8",
       "name": "API Check",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1380,
-        -4960
-      ],
-      "parameters": {
-        "jsCode": "const item = $input.first();\nconst err = item.json?.error ?? item.error?.message ?? '';\nconst statusCode = item.json?.statusCode ?? item.json?.status ?? 0;\nif (err || statusCode >= 400) {\n  return [{ json: {\n    _api_skip: true,\n    source: '01_COMEX',\n    country: 'BR',\n    status: 'skipped_api_error',\n    reason: `API unavailable: ${err || 'HTTP ' + statusCode}`,\n    run_date: new Date().toISOString(),\n    completed_at: new Date().toISOString()\n  } }];\n}\nreturn [{ json: item.json }];"
-      }
+        -1520,
+        -5184
+      ]
     },
     {
-      "id": "f549143a-571f-4eee-857e-66b902eca007",
-      "name": "API Skip?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [
-        -1160,
-        -4960
-      ],
       "parameters": {
         "conditions": {
           "options": {
@@ -456,21 +443,20 @@
             }
           ],
           "combinator": "and"
-        }
-      }
+        },
+        "options": {}
+      },
+      "id": "f549143a-571f-4eee-857e-66b902eca007",
+      "name": "API Skip?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -1264,
+        -5200
+      ]
     },
     {
-      "id": "be5803e9-5d65-4437-b20b-dac4c3875033",
-      "name": "Return Status",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 3.4,
-      "position": [
-        760,
-        -4960
-      ],
       "parameters": {
-        "mode": "manual",
-        "duplicateItem": false,
         "assignments": {
           "assignments": [
             {
@@ -494,7 +480,26 @@
           ]
         },
         "options": {}
-      }
+      },
+      "id": "be5803e9-5d65-4437-b20b-dac4c3875033",
+      "name": "Return Status",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        768,
+        -4960
+      ]
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2432,
+        -5015
+      ],
+      "id": "execute-workflow-trigger-6b8xxkCb",
+      "name": "Execute Workflow Trigger"
     }
   ],
   "pinData": {},
@@ -754,12 +759,17 @@
       ]
     }
   },
-  "active": false,
+  "active": true,
   "settings": {
     "executionOrder": "v1",
     "binaryMode": "separate",
-    "availableInMCP": false
+    "availableInMCP": false,
+    "callerPolicy": "workflowsFromSameOwner"
   },
-  "tags": [],
-  "id": "6b8xxkCbjKolIAgc"
+  "versionId": "5ab60b2b-ca68-485a-bb92-52dba2bda1e2",
+  "meta": {
+    "instanceId": "2be5d016e514bca7075b92e7e4319cc52b5ecaf9d38e791fac92ccc23d3d69ba"
+  },
+  "id": "6b8xxkCbjKolIAgc",
+  "tags": []
 }

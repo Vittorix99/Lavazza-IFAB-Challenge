@@ -128,15 +128,16 @@
         -200
       ],
       "id": "wto-llm-filter-node",
-      "name": "WTO LLM Filter"
+      "name": "WTO LLM Filter",
+      "continueOnFail": true
     },
     {
       "parameters": {
         "model": {
           "__rl": true,
-          "value": "gpt-5.4-mini",
+          "value": "gpt-4o-mini",
           "mode": "list",
-          "cachedResultName": "gpt-5.4-mini"
+          "cachedResultName": "gpt-4o-mini"
         },
         "builtInTools": {},
         "options": {
@@ -157,11 +158,12 @@
           "id": "0Vum5STk59lUOybm",
           "name": "OpenAi account"
         }
-      }
+      },
+      "continueOnFail": true
     },
     {
       "parameters": {
-        "jsCode": "const parsed = JSON.parse($json.text);\nreturn [{ json: parsed }];"
+        "jsCode": "const raw = String($json.text ?? '').trim();\nlet parsed = null;\n\nif (raw) {\n  try {\n    parsed = JSON.parse(raw);\n  } catch {\n    const cleaned = raw\n      .replace(/^```json\\s*/i, '')\n      .replace(/^```\\s*/i, '')\n      .replace(/```$/i, '')\n      .trim();\n    try {\n      parsed = JSON.parse(cleaned);\n    } catch {\n      parsed = null;\n    }\n  }\n}\n\nlet source = {};\ntry {\n  source = $('WTO Wait').item.json || {};\n} catch {\n  source = {};\n}\n\nif (!parsed || typeof parsed !== 'object') {\n  parsed = {\n    url: source.link || null,\n    keep_article: false,\n    relevance_score: 0,\n    is_about_brazil: false,\n    is_in_scope: false,\n    topic: 'other',\n    reason: 'Filter parse fallback: invalid LLM JSON'\n  };\n}\n\nif (!parsed.url) parsed.url = source.link || null;\nif (typeof parsed.keep_article !== 'boolean') parsed.keep_article = false;\nif (!Number.isInteger(parsed.relevance_score)) parsed.relevance_score = Number(parsed.relevance_score) || 0;\nif (!parsed.topic) parsed.topic = 'other';\nif (!parsed.reason) parsed.reason = 'No reason provided';\n\nreturn [{ json: parsed }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -226,15 +228,16 @@
         -200
       ],
       "id": "wto-extract-signals-node",
-      "name": "WTO Extract Signals"
+      "name": "WTO Extract Signals",
+      "continueOnFail": true
     },
     {
       "parameters": {
         "model": {
           "__rl": true,
-          "value": "gpt-5.4-mini",
+          "value": "gpt-4o-mini",
           "mode": "list",
-          "cachedResultName": "gpt-5.4-mini"
+          "cachedResultName": "gpt-4o-mini"
         },
         "builtInTools": {},
         "options": {
@@ -255,11 +258,12 @@
           "id": "0Vum5STk59lUOybm",
           "name": "OpenAi account"
         }
-      }
+      },
+      "continueOnFail": true
     },
     {
       "parameters": {
-        "jsCode": "function getCollectedPeriod(isoTs, cadenza) {\n  const d = new Date(isoTs || new Date().toISOString());\n  const pad = n => String(n).padStart(2, '0');\n  const yyyy = d.getUTCFullYear();\n  const mm = pad(d.getUTCMonth() + 1);\n  const dd = pad(d.getUTCDate());\n  const hh = pad(d.getUTCHours());\n  const doy = Math.floor((d - new Date(Date.UTC(yyyy,0,1))) / 86400000);\n  const week = pad(Math.ceil((doy + new Date(Date.UTC(yyyy,0,1)).getUTCDay() + 1) / 7));\n  switch((cadenza||'').toLowerCase()) {\n    case 'hourly':  return `${yyyy}-${mm}-${dd}T${hh}`;\n    case 'daily':   return `${yyyy}-${mm}-${dd}`;\n    case 'weekly':  return `${yyyy}-W${week}`;\n    case 'monthly': return `${yyyy}-${mm}`;\n    default:        return `${yyyy}-${mm}-${dd}`;\n  }\n}\nconst now = new Date().toISOString();\nconst _collectedPeriod = getCollectedPeriod(now, 'daily');\n\nreturn [{\n  json: {\n    source: 'WTO_NEWS',\n    source_url: meta.url || original.link || null,\n    country: 'BR',\n    macroarea: 'geo',\n    collected_at: now,\n    collected_period: _collectedPeriod,\n        url: meta.url,\n    topic: meta.topic,\n    relevance_score: meta.relevance_score,\n    reason: meta.reason,\n    title: original.title,\n    pubDate: original.pubDate,\n    signals: signals.signals,\n    entities: signals.entities,\n    sentiment: signals.sentiment,\n    summary_en: signals.summary_en,\n    embed_text: signals.summary_en + ' ' + (signals.signals || []).join('. ')\n  }\n}];"
+        "jsCode": "function getCollectedPeriod(isoTs, cadenza) {\n  const d = new Date(isoTs || new Date().toISOString());\n  const pad = n => String(n).padStart(2, '0');\n  const yyyy = d.getUTCFullYear();\n  const mm = pad(d.getUTCMonth() + 1);\n  const dd = pad(d.getUTCDate());\n  const hh = pad(d.getUTCHours());\n  const doy = Math.floor((d - new Date(Date.UTC(yyyy,0,1))) / 86400000);\n  const week = pad(Math.ceil((doy + new Date(Date.UTC(yyyy,0,1)).getUTCDay() + 1) / 7));\n  switch((cadenza||'').toLowerCase()) {\n    case 'hourly':  return `${yyyy}-${mm}-${dd}T${hh}`;\n    case 'daily':   return `${yyyy}-${mm}-${dd}`;\n    case 'weekly':  return `${yyyy}-W${week}`;\n    case 'monthly': return `${yyyy}-${mm}`;\n    default:        return `${yyyy}-${mm}-${dd}`;\n  }\n}\nconst now = new Date().toISOString();\nconst _collectedPeriod = getCollectedPeriod(now, 'daily');\n\n// Parse LLM extraction output\nlet signals = {};\ntry { signals = JSON.parse($json.text || '{}'); } catch(e) { signals = {}; }\n\n// Filter metadata (url, topic, relevance_score, reason) passed through Strip HTML\nconst meta = $('WTO Strip HTML').item.json;\n\n// Original RSS item (title, pubDate) from the loop\nlet original = {};\ntry { original = $('WTO Loop').item.json; } catch(e) {}\n\nreturn [{\n  json: {\n    source: 'WTO_NEWS',\n    source_url: meta.url || original.link || null,\n    country: 'BR',\n    macroarea: 'geo',\n    collected_at: now,\n    collected_period: _collectedPeriod,\n    url: meta.url || original.link || null,\n    topic: meta.topic || null,\n    relevance_score: meta.relevance_score || null,\n    reason: meta.reason || null,\n    title: original.title || null,\n    pubDate: original.pubDate || null,\n    signals: signals.signals || [],\n    entities: signals.entities || [],\n    sentiment: signals.sentiment || null,\n    summary_en: signals.summary_en || null,\n    embed_text: (signals.summary_en || '') + ' ' + (signals.signals || []).join('. ')\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -341,7 +345,7 @@
     },
     {
       "parameters": {
-        "jsCode": "\n// Calcola collected_period da collected_at + cadenza\nfunction getCollectedPeriod(collectedAt, cadenza) {\n  const d = new Date(collectedAt || new Date().toISOString());\n  const pad = (n) => String(n).padStart(2, '0');\n  const yyyy = d.getUTCFullYear();\n  const mm = pad(d.getUTCMonth() + 1);\n  const dd = pad(d.getUTCDate());\n  const hh = pad(d.getUTCHours());\n  // ISO week number\n  const startOfYear = new Date(Date.UTC(yyyy, 0, 1));\n  const weekNo = pad(Math.ceil(((d - startOfYear) / 86400000 + startOfYear.getUTCDay() + 1) / 7));\n  switch((cadenza || '').toLowerCase()) {\n    case 'hourly':  return `${yyyy}-${mm}-${dd}T${hh}`;\n    case 'daily':   return `${yyyy}-${mm}-${dd}`;\n    case 'weekly':  return `${yyyy}-W${weekNo}`;\n    case 'monthly': return `${yyyy}-${mm}`;\n    default:        return `${yyyy}-${mm}-${dd}`;\n  }\n}\n\nconst _cadenza = 'daily';\nconst _collectedAt = now || new Date().toISOString();\nconst _collectedPeriod = getCollectedPeriod(_collectedAt, _cadenza);\nconst meta = $('WTO Parse Signals').item.json;\nconst vector = $json.data[0].embedding;\n\nconst url = meta.url;\nlet hash = 0;\nfor (let i = 0; i < url.length; i++) {\n  hash = ((hash << 5) - hash) + url.charCodeAt(i);\n  hash |= 0;\n}\nconst pointId = Math.abs(hash);\n\nreturn [{\n  json: {\n    points: [{\n      id: pointId,\n      vector: vector,\n      payload: {\n        country: meta.country,\n        macroarea: meta.macroarea,\n        collected_at: meta.collected_at,\n        url: meta.url,\n        topic: meta.topic,\n        relevance_score: meta.relevance_score,\n        sentiment: meta.sentiment,\n        summary_en: meta.summary_en,\n        signals: meta.signals\n      }\n    }]\n  }\n}];"
+        "jsCode": "function getCollectedPeriod(collectedAt, cadenza) {\n  const d = new Date(collectedAt || new Date().toISOString());\n  const pad = (n) => String(n).padStart(2, '0');\n  const yyyy = d.getUTCFullYear();\n  const mm = pad(d.getUTCMonth() + 1);\n  const dd = pad(d.getUTCDate());\n  const hh = pad(d.getUTCHours());\n  const startOfYear = new Date(Date.UTC(yyyy, 0, 1));\n  const weekNo = pad(Math.ceil(((d - startOfYear) / 86400000 + startOfYear.getUTCDay() + 1) / 7));\n  switch((cadenza || '').toLowerCase()) {\n    case 'hourly':  return `${yyyy}-${mm}-${dd}T${hh}`;\n    case 'daily':   return `${yyyy}-${mm}-${dd}`;\n    case 'weekly':  return `${yyyy}-W${weekNo}`;\n    case 'monthly': return `${yyyy}-${mm}`;\n    default:        return `${yyyy}-${mm}-${dd}`;\n  }\n}\n\nconst _cadenza = 'daily';\nconst meta = $('WTO Parse Signals').item.json;\nconst _collectedAt = meta.collected_at || new Date().toISOString();\nconst _collectedPeriod = getCollectedPeriod(_collectedAt, _cadenza);\nconst vector = $json.data[0].embedding;\n\nconst url = meta.url || '';\nlet hash = 0;\nfor (let i = 0; i < url.length; i++) {\n  hash = ((hash << 5) - hash) + url.charCodeAt(i);\n  hash |= 0;\n}\nconst pointId = Math.abs(hash) || Math.floor(Math.random() * 1e9);\n\nreturn [{\n  json: {\n    points: [{\n      id: pointId,\n      vector: vector,\n      payload: {\n        country: meta.country,\n        macroarea: meta.macroarea,\n        collected_at: meta.collected_at,\n        url: meta.url,\n        topic: meta.topic,\n        relevance_score: meta.relevance_score,\n        sentiment: meta.sentiment,\n        summary_en: meta.summary_en,\n        signals: meta.signals\n      }\n    }]\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -383,7 +387,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const now = new Date().toISOString();\nconst meta = $('WTO Parse Signals').item.json;\n\nreturn [{\n  json: {\n    source: 'WTO_RSS',\n    country: 'BR',\n    macroarea: 'geo',\n    cadenza: '6h',\n    run_date: now,\n    status: 'done',\n    completed_at: now,\n    items_ingested: meta.items_count || null,\n  },\n}];"
+        "jsCode": "const now = new Date().toISOString();\nlet itemsIngested = 0;\n\ntry {\n  itemsIngested = $('WTO Parse Signals').all().length;\n} catch {\n  itemsIngested = 0;\n}\n\nreturn [{\n  json: {\n    source: 'WTO_RSS',\n    country: 'BR',\n    macroarea: 'geo',\n    cadenza: '6h',\n    run_date: now,\n    status: 'done',\n    completed_at: now,\n    items_ingested: itemsIngested,\n  },\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -396,13 +400,9 @@
     },
     {
       "parameters": {
-        "operation": "upsert",
+        "operation": "insert",
         "collection": "ingestion_log",
-        "options": {
-          "upsert": true
-        },
-        "fields": "source,country,macroarea,cadenza,run_date,status,completed_at,report_period,survey_number,season,market_year,latest_year,quote_date,total_detections,latest_period,enso_phase,items_ingested,ports_monitored",
-        "filter": "{ \"source\": \"WTO_RSS\", \"country\": \"BR\", \"run_date\": {{ $json.run_date }} }"
+        "fields": "source,country,macroarea,cadenza,run_date,status,completed_at"
       },
       "type": "n8n-nodes-base.mongoDb",
       "typeVersion": 1,
@@ -533,6 +533,17 @@
         },
         "options": {}
       }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2540,
+        -206
+      ],
+      "id": "execute-workflow-trigger-XVj94x5m",
+      "name": "Execute Workflow Trigger"
     }
   ],
   "pinData": {},
@@ -563,14 +574,14 @@
       "main": [
         [
           {
-            "node": "WTO Build Ingestion Log",
+            "node": "WTO Wait",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "WTO Wait",
+            "node": "WTO Build Ingestion Log",
             "type": "main",
             "index": 0
           }
@@ -626,6 +637,13 @@
         [
           {
             "node": "WTO Scrape Article",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "WTO Loop",
             "type": "main",
             "index": 0
           }

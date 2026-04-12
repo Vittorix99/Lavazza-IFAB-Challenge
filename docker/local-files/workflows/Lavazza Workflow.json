@@ -765,7 +765,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const parsed = JSON.parse($json.text);\nreturn [{ json: parsed }];"
+        "jsCode": "const raw = String($json.text ?? '').trim();\nlet parsed = null;\n\nif (raw) {\n  try {\n    parsed = JSON.parse(raw);\n  } catch {\n    const cleaned = raw\n      .replace(/^```json\\s*/i, '')\n      .replace(/^```\\s*/i, '')\n      .replace(/```$/i, '')\n      .trim();\n    try {\n      parsed = JSON.parse(cleaned);\n    } catch {\n      parsed = null;\n    }\n  }\n}\n\nlet source = {};\ntry {\n  source = $('WTO Wait').item.json || {};\n} catch {\n  source = {};\n}\n\nif (!parsed || typeof parsed !== 'object') {\n  parsed = {\n    url: source.link || null,\n    keep_article: false,\n    relevance_score: 0,\n    is_about_brazil: false,\n    is_in_scope: false,\n    topic: 'other',\n    reason: 'Filter parse fallback: invalid LLM JSON'\n  };\n}\n\nif (!parsed.url) parsed.url = source.link || null;\nif (typeof parsed.keep_article !== 'boolean') parsed.keep_article = false;\nif (!Number.isInteger(parsed.relevance_score)) parsed.relevance_score = Number(parsed.relevance_score) || 0;\nif (!parsed.topic) parsed.topic = 'other';\nif (!parsed.reason) parsed.reason = 'No reason provided';\n\nreturn [{ json: parsed }];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -3868,7 +3868,13 @@
             "index": 0
           }
         ],
-        []
+        [
+          {
+            "node": "WTO Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "WTO OpenAI Extract Model": {

@@ -17,22 +17,28 @@ nest_asyncio.apply()
 # ==========================================
 # CONFIGURAZIONE PAGINA
 # ==========================================
-st.set_page_config(page_title="Dashboard Dati Brasile", layout="wide", page_icon="🇧🇷")
-st.title("🇧🇷 Dashboard Analisi Brasile: Incendi, Clima e Porti")
+st.set_page_config(page_title="Dashboard Dati Brasile", layout="wide")
+st.title("Dashboard Brasile — Incendi, Clima e Porti")
 
-tab1, tab2, tab3 = st.tabs(["🔥 Incendi & Caffè", "🌊 El Niño / La Niña", "⚓ Traffico Porti (Live)"])
+tab1, tab2, tab3 = st.tabs(["Incendi & Caffè", "ENSO / El Niño", "Traffico Porti (Live)"])
 
 # ==========================================
 # TAB 1: INCENDI E CAFFÈ
 # ==========================================
 with tab1:
-    st.header("Impatto degli Incendi sulla Produzione di Caffè")
-    
+    st.header("Incendi attivi e produzione di caffè in Brasile")
+
     st.markdown("""
-    **💡 Come interpretare questi dati:**
-    - **Gradiente della mappa (Verde/Viola):** Indica il volume di produzione di caffè (Arabica o Robusta) per Stato in milioni di sacchi. Gli Stati in grigio non producono caffè.
-    - **Punti Rossi/Gialli (Focolai):** Solo gli incendi di grandissima entità (FRP - Fire Radiative Power elevato) sono evidenziati con un **gradiente di colori caldi (dal rosso scuro al giallo brillante)** e una dimensione maggiore. I piccoli fuochi sono tenuti in grigio semitrasparente per non intasare la vista.
-    - Se i focolai caldi si sovrappongono alle zone intensamente colorate (es. Minas Gerais o Espírito Santo), il rischio per l'agricoltura è altissimo.
+**Come leggere la mappa:**
+- **Gradiente (Verde/Viola):** volume di produzione caffè per Stato (milioni di sacchi). Gli Stati grigi non producono caffè.
+- **Punti caldi:** incendi ad alto FRP (Fire Radiative Power > 50 MW), colorati per intensità. Fuochi minori in grigio semitrasparente.
+- Se i focolai caldi si sovrappongono alle zone produttive (es. Minas Gerais, Espírito Santo), il rischio coltura è elevato.
+
+**Nota — Coffee Regions (analisi agente):** la visualizzazione usa dati di produzione aggregati per Stato.
+L'agente ambiente (environment_agent) arricchisce ogni rilevamento NASA FIRMS con i confini GeoJSON
+dei **comuni produttori di caffè** (MongoDB `coffee_regions`, livello L2) tramite query `$geoIntersects`.
+I campi `coffee_zone_detections` e `coffee_zone_ratio` indicano quanti fuochi cadono in comuni
+produttori — questa informazione è disponibile nel report giornaliero e nel chatbot.
     """)
 
     @st.cache_data(ttl=3600)
@@ -105,18 +111,16 @@ with tab1:
 # TAB 2: EL NIÑO / LA NIÑA (ENSO)
 # ==========================================
 with tab2:
-    st.header("Stato attuale: Indici ENSO (ONI e SOI)")
+    st.header("Indici ENSO — ONI e SOI")
     
     st.markdown("""
-    ### 🔍 Cosa sono questi indici?
-    - **ONI (Oceanic Niño Index):** Misura l'anomalia della temperatura superficiale del mare nella regione centrale dell'Oceano Pacifico equatoriale. È l'indicatore principale globale. Valori alti significano acque molto più calde del normale.
-    - **SOI (Southern Oscillation Index):** Misura la differenza di pressione atmosferica tra Tahiti (Polinesia Francese) e Darwin (Australia). Mostra come l'atmosfera sta reagendo ai cambiamenti di temperatura dell'oceano.
+**ONI (Oceanic Niño Index):** anomalia temperatura superficiale Pacifico equatoriale. Indicatore primario globale.
+**SOI (Southern Oscillation Index):** differenza di pressione atmosferica Tahiti–Darwin. Risposta atmosferica all'ONI.
 
-    ### 💡 Come interpretare gli impatti in Brasile:
-    - L'anomalia climatica ENSO (El Niño-Southern Oscillation) è confermata quando la componente oceanica (ONI) e quella atmosferica (SOI) si muovono nella stessa direzione.
-    - **El Niño (ONI > 0.5 / SOI < -7):** Porta siccità critica e alte temperature nel Nord/Nord-Est del Brasile (alto rischio incendi in Amazzonia), ma precipitazioni eccessive al Sud, mettendo a rischio i raccolti di soia e grano per allagamenti.
-    - **La Niña (ONI < -0.5 / SOI > +7):** Porta grande piovosità al Nord, ma severa siccità a Sud, colpendo fortemente le coltivazioni di quell'area.
-    - *Nota: Quando entrambi gli indici superano con forza le rispettive soglie, l'evento si dice "accoppiato". In questi casi, gli impatti agricoli sono molto più severi e prevedibili.*
+**Impatti in Brasile:**
+- **El Niño (ONI > 0.5 / SOI < -7):** siccità Nord/Amazzonia, rischio incendi; piogge eccessive al Sud.
+- **La Niña (ONI < -0.5 / SOI > +7):** piovosità al Nord, siccità al Sud con danno colture.
+- Quando ONI e SOI superano entrambe le soglie (evento accoppiato), gli impatti agricoli sono più severi e prevedibili.
     """)
 
     @st.cache_data(ttl=86400) # La cache dura 24h: protegge dalle chiamate API eccessive (i dati NOAA si aggiornano mensilmente)
@@ -237,18 +241,16 @@ with tab2:
 # TAB 3: PORTI LIVE (CICLO PERPETUO)
 # ==========================================
 with tab3:
-    st.header("Monitoraggio Navale nei Porti (Ascolto Live)")
-    
-    st.warning("""
-    **⚠️ NOTA INFORMATIVA SULLA DEMO**
-    I dati visualizzati in questa demo si riferiscono ai più grandi hub portuali globali (Singapore, Rotterdam, ecc.) anziché ai porti Brasiliani per via della copertura frammentata dei servizi AIS gratuiti in Sud America.
-    """)
+    st.header("Monitoraggio Navale — Porti (Live AIS)")
+
+    st.warning(
+        "NOTA DEMO: i dati si riferiscono a hub portuali globali (Singapore, Rotterdam, Los Angeles) "
+        "anziché ai porti brasiliani, per via della copertura frammentata dei servizi AIS gratuiti in Sud America."
+    )
 
     st.markdown("""
-    **💡 Come interpretare questi dati:**
-    - Lo script ascolta via Websocket il transponder AIS globale.
-    - **Filtro Cargo Attivo:** Stiamo intercettando *esplicitamente* solo le navi mercantili/cargo (Codici AIS 70-79).
-    - **Attesa Dati:** Le navi inviano la posizione ogni 10 secondi, ma la loro "identità" (anagrafica) solo ogni 6 minuti. Per questo vedrai molte navi intercettate che confermeranno di essere "Cargo" solo dopo qualche minuto di ascolto.
+- Ascolto WebSocket AIS globale. Filtro attivo: solo navi cargo (codici AIS 70-79).
+- Le navi trasmettono posizione ogni 10s ma anagrafica ogni 6 min: alcune imbarcazioni impiegano qualche minuto per essere classificate come cargo.
     """)
 
     API_KEY = "23dff2542eb48c414c4c0213de19b29dd4deaa30"
@@ -358,17 +360,17 @@ with tab3:
                 results[port]["totali_sconosciute"] += 1
 
         # 5. RENDER DELL'INTERFACCIA
-        st.info(f"📡 In ascolto AIS... (Navi totali rilevate: {tot_vessels} | Di cui Cargo confermate: {tot_cargo_known})")
-        st.success(f"✅ Ultimo aggiornamento: {time.strftime('%H:%M:%S')} - Prossimo ciclo tra 30 sec.")
+        st.info(f"In ascolto AIS... Navi rilevate: {tot_vessels} | Cargo confermate: {tot_cargo_known}")
+        st.success(f"Ultimo aggiornamento: {time.strftime('%H:%M:%S')} — prossimo ciclo tra 30s")
         
         cols = st.columns(len(PORTS))
         
         for i, (port_name, counts) in enumerate(results.items()):
             with cols[i]:
-                st.markdown(f"### {port_name}")
-                st.metric("🚢 Cargo in Transito", counts["cargo_transito"])
-                st.metric("📦 Cargo in Sosta", counts["cargo_sosta"])
-                st.caption(f"*(Altre navi intercettate in attesa di dati: {counts['totali_sconosciute']})*")
+                st.markdown(f"**{port_name}**")
+                st.metric("Cargo in Transito", counts["cargo_transito"])
+                st.metric("Cargo in Sosta", counts["cargo_sosta"])
+                st.caption(f"In attesa di classificazione: {counts['totali_sconosciute']}")
         
         time.sleep(2)
         st.rerun()

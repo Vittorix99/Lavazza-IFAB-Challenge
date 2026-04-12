@@ -97,3 +97,14 @@ def collection_exists(collection: str) -> bool:
         return True
     except Exception:
         return False
+
+
+def ensure_collection(collection: str, vector_size: int = 1536) -> None:
+    """Crea la collection se non esiste. Dimensione default: 1536 (text-embedding-3-small)."""
+    if not collection_exists(collection):
+        from qdrant_client.models import Distance, VectorParams
+        get_client().create_collection(
+            collection_name=collection,
+            vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
+        )
+        print(f"[qdrant] Collection '{collection}' creata (size={vector_size})")

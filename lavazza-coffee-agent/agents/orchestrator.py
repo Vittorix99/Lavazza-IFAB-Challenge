@@ -261,23 +261,96 @@ def rag_node(state: AgentState) -> dict:
 
 def save_node(state: AgentState) -> dict:
     """
-    Salva il run completo in MongoDB collection agent_runs.
-    Ritorna state invariato (nessun aggiornamento necessario).
+    Salva il run in MongoDB agent_runs e, per daily/weekly/monthly,
+    archivia il testo del report in Qdrant reports_archive per RAG futuro.
     """
+    import uuid
+    import os
+    from openai import OpenAI
+    from utils.qdrant import ensure_collection, upsert
+
+    report_type = state.get("report_type", "daily")
+    run_at = state.get("run_at", datetime.now(timezone.utc).isoformat())
+    report_json = state.get("report_json", {})
+    final_score = state.get("final_score", 0.0)
+    country = state.get("country", "BR")
+
+    # --- 1. MongoDB agent_runs ---
     run_doc = {
-        "country": state.get("country", "BR"),
-        "report_type": state.get("report_type", "daily"),
-        "run_at": state.get("run_at"),
-        "final_score": state.get("final_score"),
+        "country": country,
+        "report_type": report_type,
+        "run_at": run_at,
+        "final_score": final_score,
         "alerts": state.get("alerts", []),
         "signals_count": len(state.get("signals", [])),
         "summaries": state.get("summaries", {}),
-        "report_json": state.get("report_json", {}),
+        "report_json": report_json,
         "data_freshness": state.get("data_freshness", {}),
         "saved_at": datetime.now(timezone.utc).isoformat(),
     }
     run_id = save_agent_run(run_doc)
-    print(f"[save_node] Run salvato: {run_id}")
+    print(f"[save_node] Run salvato MongoDB: {run_id}")
+
+    # --- 2. Qdrant reports_archive ---
+    # Costruiamo il testo da embeddare: headline + executive_summary + sezioni
+    try:
+        if report_type == "daily":
+            headline = report_json.get("headline", "")
+            exec_summary = report_json.get("executive_summary", "")
+            sections_text = " ".join(
+                s.get("text", "") for s in report_json.get("sections", [])
+            )
+            outlook = report_json.get("outlook", "")
+            embed_text = f"{headline}. {exec_summary} {sections_text} {outlook}"
+        else:
+            # weekly/monthly: usa management executive_summary + sezioni
+            mgmt = report_json.get("management", {})
+            acquisti = report_json.get("acquisti", {})
+            embed_text = " ".join(filter(None, [
+                mgmt.get("executive_summary", ""),
+                mgmt.get("outlook", ""),
+                acquisti.get("price_outlook", ""),
+                acquisti.get("supply_risk", ""),
+                " ".join(s.get("text", "") for s in mgmt.get("sections", [])),
+            ]))
+
+        embed_text = embed_text.strip()[:6000]  # limite sicuro per embedding API
+
+        if embed_text:
+            openai_client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+            resp = openai_client.embeddings.create(
+                model="text-embedding-3-small",
+                input=embed_text,
+            )
+            vector = resp.data[0].embedding
+
+            ensure_collection("reports_archive", vector_size=len(vector))
+
+            # ID deterministico: UUID5 da run_at + report_type → upsert idempotente
+            point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{run_at}:{report_type}"))
+
+            payload = {
+                "country": country,
+                "report_type": report_type,
+                "run_at": run_at,
+                "final_score": final_score,
+                "headline": report_json.get("headline", ""),
+                "executive_summary": (
+                    report_json.get("executive_summary")
+                    or report_json.get("management", {}).get("executive_summary", "")
+                ),
+                "alerts": state.get("alerts", []),
+                "text": embed_text[:1000],  # snippet leggibile nel RAG context
+            }
+
+            upsert("reports_archive", point_id, vector, payload)
+            print(f"[save_node] Report archiviato Qdrant reports_archive (id={point_id})")
+        else:
+            print("[save_node] Nessun testo da embeddare per reports_archive — skip Qdrant")
+
+    except Exception as e:
+        print(f"[save_node] Errore salvataggio Qdrant (non bloccante): {e}")
+
     return {}
 
 
