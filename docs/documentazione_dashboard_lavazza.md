@@ -1,6 +1,5 @@
 # Documentazione Tecnica & di Business
 # Dashboard Intelligence Filiera Caffè — Lavazza Brazil Origins
-## Guida Completa per la Presentazione
 
 ---
 
@@ -33,27 +32,6 @@ Per eseguire la dashboard sono necessari i seguenti file nella stessa cartella d
 
 ```bash
 pip install -r requirements.txt
-```
-
-Il file `requirements.txt` include le librerie principali:
-
-```
-pymongo
-python-dotenv
-streamlit
-pandas
-numpy
-plotly
-requests
-matplotlib
-scipy
-beautifulsoup4
-```
-
-Alcune librerie aggiuntive **non incluse** nel `requirements.txt` potrebbero essere necessarie a seconda dell'ambiente; installarle separatamente se mancanti:
-
-```bash
-pip install geopandas websockets faostat openpyxl
 ```
 
 3. **Variabili d'ambiente** per i dati live (vedi sezione dedicata sotto):
@@ -735,8 +713,3 @@ fetch_conab.py (script separato)
 ├── Parsing Excel               Ricerca intelligente colonne (d) e (f)
 └── Export CSV                  data_sources/conab/conab_data.csv
 ```
-
----
-
-*Documento generato per uso interno Lavazza — Dashboard Prototipo AI Origins Intelligence*
-*Versione 4.0 — Aprile 2026*
