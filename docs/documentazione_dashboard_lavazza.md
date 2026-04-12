@@ -1,5 +1,6 @@
-# Documentazione Tecnica — Dashboard Intelligence Filiera Caffè
-## Lavazza Brazil Origins Intelligence · Aprile 2026
+# Documentazione Tecnica & di Business
+# Dashboard Intelligence Filiera Caffè — Lavazza Brazil Origins
+## Guida Completa per la Presentazione
 
 ---
 
@@ -25,7 +26,27 @@
 ```bash
 # Installa tutte le dipendenze
 pip install -r requirements.txt
-pip install geopandas websockets faostat openpyxl yfinance
+```
+
+Il file `requirements.txt` include le librerie principali:
+
+```
+pymongo
+python-dotenv
+streamlit
+pandas
+numpy
+plotly
+requests
+matplotlib
+scipy
+beautifulsoup4
+```
+
+Alcune librerie aggiuntive **non incluse** nel `requirements.txt` potrebbero essere necessarie a seconda dell'ambiente; installarle separatamente se mancanti:
+
+```bash
+pip install geopandas websockets faostat openpyxl
 ```
 
 ### Variabili d'ambiente (opzionali ma consigliate)
@@ -663,44 +684,17 @@ app_standalone.py
 │   ├── render_tab_4()         Prezzi (spread, BRL/EUR dual-subplot, Z-score)
 │   ├── render_tab_5()         Produttività (FAOSTAT, USDA, CONAB, bubble)
 │   └── render_tab_6()         Precipitazioni
-└── main()                     Sidebar → fetch → health panel → tab routing
+└── main()                     Orchestrazione: fetch → sidebar → tabs
+
+fetch_conab.py (script separato)
+│
+├── Scraping pagina CONAB       BeautifulSoup + requests
+├── Download file Excel          Link dinamico estratto dalla pagina
+├── Parsing Excel               Ricerca intelligente colonne (d) e (f)
+└── Export CSV                  data_sources/conab/conab_data.csv
 ```
-
-**Gestione errori**: Ogni `fetch_*()` è protetta da `try/except` multiplo. In caso di fallimento, la funzione registra l'errore nel pannello "Salute API" e restituisce dati simulati — **un'API giù non blocca mai il resto della dashboard**.
-
-**Caching**: `@st.cache_data(ttl=N_secondi)` memorizza il risultato di ogni fetch in RAM. TTL tipici: 3600s (1h) per prezzi e incendi, 86400s (24h) per ENS e USDA.
 
 ---
 
-## PARTE 6 — GLOSSARIO
-
-| Termine | Definizione |
-|---------|-------------|
-| **API** | Application Programming Interface — sistema di comunicazione tra software. |
-| **AIS** | Automatic Identification System — tracciamento obbligatorio navi commerciali via VHF. |
-| **Arabica** | Coffea arabica — varietà premium, coltivata in altitudine, ~60% produzione mondiale. |
-| **Base 100** | Normalizzazione che porta tutte le serie al valore 100 alla data iniziale per confronti di crescita relativa. |
-| **Cache TTL** | Time To Live — durata di validità di un dato in memoria prima del refresh. |
-| **Conilon** | Nome locale brasiliano per Coffea canephora (Robusta). |
-| **Deficit pluviometrico** | Scostamento percentuale delle precipitazioni al di sotto della media storica. |
-| **ENSO** | El Niño-Southern Oscillation — fenomeno climatico ciclico del Pacifico che altera le precipitazioni globali. |
-| **Ending Stocks** | Scorte di fine anno commerciale — indicatore di disponibilità fisica residua per l'anno successivo. |
-| **FRP** | Fire Radiative Power — potenza energetica irradiata da un incendio in Megawatt. |
-| **ICE** | Intercontinental Exchange — borsa commodity per i futures del caffè. |
-| **Marketing Year** | Anno commerciale agricolo (per il caffè brasiliano: Aprile–Marzo). |
-| **merge_asof** | Funzione pandas per unire due dataframe su una chiave temporale usando la data più vicina. |
-| **MMSI** | Maritime Mobile Service Identity — identificativo unico di ogni nave (9 cifre). |
-| **ONI** | Oceanic Niño Index — anomalia termica superficie marina Pacifico Centrale. |
-| **Pink Sheet** | Nome colloquiale del dataset mensile prezzi commodity della Banca Mondiale. |
-| **PSD** | Production, Supply and Distribution — database USDA di riferimento globale. |
-| **QCL** | Crops and Livestock Products — dataset FAOSTAT per colture. |
-| **Robusta** | Coffea canephora — varietà resistente alla siccità, più caffeina, usata in miscele espresso. |
-| **Sacco 60 kg** | Unità di misura standard internazionale per il caffè verde (1 MT = 16,667 sacchi). |
-| **SOG** | Speed Over Ground — velocità della nave in nodi rispetto al fondale. |
-| **SOI** | Southern Oscillation Index — differenza standardizzata di pressione atmosferica Tahiti–Darwin. |
-| **Spread** | Differenziale di prezzo tra due commodity correlate. Nel caffè: Arabica − Robusta. |
-| **SST** | Sea Surface Temperature — temperatura superficiale del mare. |
-| **VIIRS** | Visible Infrared Imaging Radiometer Suite — sensore termico satellitare NASA. |
-| **WebSocket** | Protocollo di comunicazione bidirezionale persistente per dati in streaming. |
-| **yfinance** | Libreria Python per download di serie storiche da Yahoo Finance. |
-| **Z-score** | Misura statistica: di quante deviazioni standard un valore si discosta dalla media corrente. |
+*Documento generato per uso interno Lavazza — Dashboard Prototipo AI Origins Intelligence*
+*Versione 4.0 — Aprile 2026*
