@@ -6,8 +6,8 @@
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
-        -2688,
-        -32
+        0,
+        0
       ],
       "id": "722cefd9-864a-4638-9c44-e45d6eba0bff",
       "name": "Manual Trigger"
@@ -26,8 +26,8 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        -2688,
-        96
+        0,
+        200
       ],
       "id": "00712322-08ab-476d-8b71-f1efc603f2fb",
       "name": "Schedule Trigger"
@@ -71,8 +71,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -2288,
-        32
+        260,
+        0
       ],
       "id": "479756a5-0143-4519-9ab8-74a3bef47f64",
       "name": "GDELT caffè",
@@ -88,8 +88,8 @@
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
-        -2096,
-        32
+        1040,
+        100
       ],
       "id": "d945aad6-c177-4b62-b9f9-d9c5d2a231c5",
       "name": "Wait 8s 1",
@@ -135,8 +135,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -688,
-        32
+        1300,
+        0
       ],
       "id": "16e78893-4f96-4c99-9df4-039f353ee6e7",
       "name": "GDELT disastri",
@@ -152,8 +152,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -448,
-        32
+        1820,
+        0
       ],
       "id": "491594c8-cbcb-4ec1-8457-c38306322c38",
       "name": "GDELT Multi-Query"
@@ -166,8 +166,8 @@
       "type": "n8n-nodes-base.splitOut",
       "typeVersion": 1,
       "position": [
-        -240,
-        32
+        2080,
+        0
       ],
       "id": "e692a471-efa6-4733-b621-8d1bd8fcb09d",
       "name": "Split Out1"
@@ -179,8 +179,8 @@
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
       "position": [
-        16,
-        32
+        2340,
+        0
       ],
       "id": "692e74da-62ed-41a4-a7e9-7cfe99087a38",
       "name": "Loop Over Items1"
@@ -192,8 +192,8 @@
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
-        240,
-        32
+        2600,
+        0
       ],
       "id": "af48a816-1422-4c76-a993-b97ab2f34398",
       "name": "Wait1",
@@ -215,8 +215,8 @@
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
       "typeVersion": 1.9,
       "position": [
-        432,
-        48
+        2860,
+        0
       ],
       "id": "e2becbc3-8614-4d0f-b569-e733e05906e9",
       "name": "Basic LLM Chain1",
@@ -238,8 +238,8 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1.3,
       "position": [
-        432,
-        256
+        2860,
+        240
       ],
       "id": "bcc6535e-e28b-4815-ba4f-4899f36108d5",
       "name": "OpenAI Chat Model1",
@@ -259,8 +259,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        720,
-        48
+        3120,
+        0
       ],
       "id": "f2043b54-76e2-492f-9f61-403c9064132b",
       "name": "Code in JavaScript1"
@@ -293,8 +293,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        912,
-        48
+        3380,
+        0
       ],
       "id": "d95a6418-2f52-4c40-bcad-543fb427399f",
       "name": "If1"
@@ -314,8 +314,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        1152,
-        32
+        3640,
+        0
       ],
       "id": "1cf1083b-5ba4-4e71-9b7a-02db17b0aa1f",
       "name": "Scrape Article",
@@ -330,8 +330,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1376,
-        32
+        3900,
+        0
       ],
       "id": "c891af8d-fd75-4fd6-944b-059bbc795a7a",
       "name": "Strip HTML"
@@ -352,8 +352,8 @@
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
       "typeVersion": 1.9,
       "position": [
-        1600,
-        16
+        4160,
+        0
       ],
       "id": "41c7321d-6701-495b-be15-ef1e54693ca1",
       "name": "Extract Signals",
@@ -375,8 +375,8 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1.3,
       "position": [
-        1600,
-        208
+        4160,
+        240
       ],
       "id": "c0974160-d7c3-4714-b78f-601abfee7b16",
       "name": "OpenAI Extract Model",
@@ -396,8 +396,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1888,
-        16
+        4420,
+        0
       ],
       "id": "e0a8bfad-4a29-4d90-84af-3846c8bf124e",
       "name": "Parse Signals"
@@ -414,8 +414,8 @@
       "type": "n8n-nodes-base.mongoDb",
       "typeVersion": 1,
       "position": [
-        2112,
-        16
+        4680,
+        0
       ],
       "id": "ad5d1c44-cc1f-48f7-8d6f-f4c7a8e9215c",
       "name": "MongoDB raw_geo",
@@ -462,7 +462,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        2336,
+        4940,
         0
       ],
       "id": "9f93913e-b5db-4d29-ae19-87648dbd9ee8",
@@ -484,7 +484,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2560,
+        5200,
         0
       ],
       "id": "365bef33-5a5c-4a01-b485-3481c36005cb",
@@ -513,7 +513,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        2768,
+        5460,
         0
       ],
       "id": "884e1611-7ea9-40bb-abf4-9e303e65a123",
@@ -529,8 +529,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        208,
-        -144
+        5720,
+        0
       ],
       "id": "d33bfea3-d6a4-407d-8888-cb3d6434802b",
       "name": "Build Ingestion Log"
@@ -545,8 +545,8 @@
       "type": "n8n-nodes-base.mongoDb",
       "typeVersion": 1,
       "position": [
-        432,
-        -144
+        1040,
+        -100
       ],
       "id": "62057ad7-bce6-4518-a1fe-18a66ee92c91",
       "name": "MongoDB ingestion_log",
@@ -566,8 +566,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1888,
-        -160
+        520,
+        0
       ]
     },
     {
@@ -598,8 +598,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        -1856,
-        32
+        780,
+        0
       ]
     },
     {
@@ -633,8 +633,8 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        640,
-        -144
+        5980,
+        0
       ]
     },
     {
@@ -642,8 +642,8 @@
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1,
       "position": [
-        -2928,
-        32
+        0,
+        -200
       ],
       "id": "0413c6b7-5666-4d82-8ec0-136e502159e6",
       "name": "Execute Workflow Trigger"
@@ -657,8 +657,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -560,
-        32
+        1560,
+        0
       ],
       "continueOnFail": false
     }

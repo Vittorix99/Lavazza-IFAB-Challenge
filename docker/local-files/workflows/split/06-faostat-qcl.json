@@ -6,8 +6,8 @@
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
-        -2240,
-        -2740
+        0,
+        0
       ],
       "id": "manual-trigger-faostat",
       "name": "Manual Trigger"
@@ -26,8 +26,8 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        -2240,
-        -2620
+        0,
+        200
       ],
       "id": "schedule-trigger-faostat",
       "name": "Schedule Trigger"
@@ -65,8 +65,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -1600,
-        -2680
+        520,
+        0
       ],
       "id": "faostat-auth-login-node",
       "name": "FAOSTAT Auth Login",
@@ -82,8 +82,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1360,
-        -2680
+        1300,
+        0
       ],
       "id": "faostat-extract-token-node",
       "name": "FAOSTAT Extract Token"
@@ -128,8 +128,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -1120,
-        -2920
+        1560,
+        0
       ],
       "id": "faostat-pp-download-node",
       "name": "FAOSTAT PP Download",
@@ -145,8 +145,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -880,
-        -2920
+        1820,
+        0
       ],
       "id": "faostat-parse-pp-node",
       "name": "FAOSTAT Parse PP"
@@ -191,8 +191,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -1120,
-        -2680
+        2080,
+        0
       ],
       "id": "faostat-qcl-download-node",
       "name": "FAOSTAT QCL Download",
@@ -202,13 +202,13 @@
     },
     {
       "parameters": {
-        "jsCode": "function getCollectedPeriod(isoTs, cadenza) {\n  const d = new Date(isoTs || new Date().toISOString());\n  const pad = n => String(n).padStart(2, '0');\n  const yyyy = d.getUTCFullYear();\n  const mm = pad(d.getUTCMonth() + 1);\n  const dd = pad(d.getUTCDate());\n  const hh = pad(d.getUTCHours());\n  const doy = Math.floor((d - new Date(Date.UTC(yyyy,0,1))) / 86400000);\n  const week = pad(Math.ceil((doy + new Date(Date.UTC(yyyy,0,1)).getUTCDay() + 1) / 7));\n  switch((cadenza||'').toLowerCase()) {\n    case 'hourly':  return `${yyyy}-${mm}-${dd}T${hh}`;\n    case 'daily':   return `${yyyy}-${mm}-${dd}`;\n    case 'weekly':  return `${yyyy}-W${week}`;\n    case 'monthly': return `${yyyy}-${mm}`;\n    default:        return `${yyyy}-${mm}-${dd}`;\n  }\n}\nconst now=new Date().toISOString();function toNum(v){if(v===null||v===undefined||v==='')return null;const n=Number(String(v).replace(',','.'));return Number.isFinite(n)?n:null;}function rowsFrom(x){if(Array.isArray(x))return x;if(x&&Array.isArray(x.data))return x.data;if(x&&x.data&&Array.isArray(x.data.data))return x.data.data;if(x&&x.data&&Array.isArray(x.data.list))return x.data.list;if(x&&Array.isArray(x.list))return x.list;return [];}function normEl(label,code){const l=String(label||'').toLowerCase();const c=String(code||'');if(l.includes('yield')||c==='2413')return 'yield_kgha';if((l.includes('production')&&!l.includes('export'))||c==='5510'||c==='2510')return 'production_t';if(l.includes('export')||c==='5910')return 'export_t';if(l.includes('harvested area'))return 'harvested_area_ha';if(l.includes('area'))return 'area_ha';return 'other';}function pct(cur,prev){if(cur===null||prev===null||prev===0)return null;return Number((((cur-prev)/prev)*100).toFixed(4));}const rows=rowsFrom($json).map((r)=>{const year=Number(r.year??r.Year??r.year_code??r.yearCode??r.anno);const elementLabel=r.element??r.Element??r.element_label??r.elementName??r.elementLabel??'';const elementCode=String(r.element_code??r.elementCode??r.ElementCode??'');const itemCode=String(r.item_code??r.itemCode??r.ItemCode??r.item??'');const itemLabel=String(r.item_label??r.itemName??r.item??r.Item??'');const areaCode=String(r.area_code??r.areaCode??r.AreaCode??r.area??'');const areaLabel=String(r.area_label??r.areaName??r.area??r.Area??'');const value=toNum(r.value??r.Value??r.valore);if(!Number.isInteger(year)||value===null)return null;return {year,elementLabel:String(elementLabel),elementCode,itemCode,itemLabel,areaCode,areaLabel,value,key:normEl(elementLabel,elementCode)};}).filter(Boolean);if(!rows.length){const sample=(typeof $json==='object')?JSON.stringify($json).slice(0,400):String($json);throw new Error('FAOSTAT QCL returned no usable rows. Raw='+sample);}const byYear=new Map();for(const row of rows){const e=byYear.get(row.year)||{year:row.year,production_t:null,yield_kgha:null,export_t:null,area_ha:null,harvested_area_ha:null,raw:[]};if(row.key!=='other'){e[row.key]=row.value;}e.raw.push({element:row.elementLabel,element_code:row.elementCode,value:row.value});byYear.set(row.year,e);}const yearly=Array.from(byYear.values()).sort((a,b)=>a.year-b.year).map((r)=>({year:r.year,production_t:r.production_t,yield_kgha:r.yield_kgha,export_t:r.export_t,area_ha:r.area_ha,harvested_area_ha:r.harvested_area_ha}));const latest=yearly[yearly.length-1];const previous=yearly.length>1?yearly[yearly.length-2]:null;const yoyProduction=pct(latest.production_t,previous?previous.production_t:null);const yoyYield=pct(latest.yield_kgha,previous?previous.yield_kgha:null);const yoyExport=pct(latest.export_t,previous?previous.export_t:null);const movementLabel=(yoyProduction!==null&&yoyProduction>=5)?'supply_expanding':(yoyProduction!==null&&yoyProduction<=-5)?'supply_tightening':'stable';const signals=[];if(yoyProduction!==null&&yoyProduction>=5)signals.push('production_up');if(yoyProduction!==null&&yoyProduction<=-5)signals.push('production_down');if(yoyYield!==null&&yoyYield<=-5)signals.push('yield_down');if(yoyExport!==null&&yoyExport>=5)signals.push('exports_up');const itemCode=rows[0].itemCode||'656';const itemName=rows[0].itemLabel||'Coffee, green';const areaCode=rows[0].areaCode||'21';const areaName=rows[0].areaLabel||'Brazil';const summary='FAOSTAT QCL latest year '+latest.year+' for '+areaName+' reports production '+(latest.production_t===null?'n/a':latest.production_t)+' t and yield '+(latest.yield_kgha===null?'n/a':latest.yield_kgha)+' kg/ha.'+(previous?' Versus '+previous.year+', production changed by '+(yoyProduction===null?'n/a':yoyProduction.toFixed(4))+'%.':'');const latestRaw=(byYear.get(latest.year)||{raw:[]}).raw.slice(0,50);return [{json:{source:'FAOSTAT_QCL',source_format:'json_api',source_base_url:'https://faostatservices.fao.org/api/v1',source_url:'https://faostatservices.fao.org/api/v1',dataset_code:'QCL',country:'BR',macroarea:'colture',collected_at:now,area_code:areaCode,area_name:areaName,item_code:itemCode,item_name:itemName,element_codes_requested:['2312','2413','2510','2111','2313'],latest_year:latest.year,latest,previous,derived_metrics:{yoy_production_pct:yoyProduction,yoy_yield_pct:yoyYield,yoy_export_pct:yoyExport},movement_label:movementLabel,signals,summary_en:summary,yearly_series:yearly.slice(-6),raw_latest:latestRaw,_chart_fields:['yearly_series','raw_latest']}}];"
+        "jsCode": "function getCollectedPeriod(isoTs, cadenza) {\n  const d = new Date(isoTs || new Date().toISOString());\n  const pad = n => String(n).padStart(2, '0');\n  const yyyy = d.getUTCFullYear();\n  const mm = pad(d.getUTCMonth() + 1);\n  const dd = pad(d.getUTCDate());\n  const hh = pad(d.getUTCHours());\n  const doy = Math.floor((d - new Date(Date.UTC(yyyy,0,1))) / 86400000);\n  const week = pad(Math.ceil((doy + new Date(Date.UTC(yyyy,0,1)).getUTCDay() + 1) / 7));\n  switch((cadenza||'').toLowerCase()) {\n    case 'hourly':  return `${yyyy}-${mm}-${dd}T${hh}`;\n    case 'daily':   return `${yyyy}-${mm}-${dd}`;\n    case 'weekly':  return `${yyyy}-W${week}`;\n    case 'monthly': return `${yyyy}-${mm}`;\n    default:        return `${yyyy}-${mm}-${dd}`;\n  }\n}\nconst now=new Date().toISOString();function toNum(v){if(v===null||v===undefined||v==='')return null;const n=Number(String(v).replace(',','.'));return Number.isFinite(n)?n:null;}function rowsFrom(x){if(Array.isArray(x))return x;if(x&&Array.isArray(x.data))return x.data;if(x&&x.data&&Array.isArray(x.data.data))return x.data.data;if(x&&x.data&&Array.isArray(x.data.list))return x.data.list;if(x&&Array.isArray(x.list))return x.list;return [];}function normEl(label,code){const l=String(label||'').toLowerCase();const c=String(code||'');if(l.includes('yield')||c==='2413')return 'yield_kgha';if((l.includes('production')&&!l.includes('export'))||c==='5510'||c==='2510')return 'production_t';if(l.includes('export')||c==='5910')return 'export_t';if(l.includes('harvested area'))return 'harvested_area_ha';if(l.includes('area'))return 'area_ha';return 'other';}function pct(cur,prev){if(cur===null||prev===null||prev===0)return null;return Number((((cur-prev)/prev)*100).toFixed(4));}const rows=rowsFrom($json).map((r)=>{const year=Number(r.year??r.Year??r.year_code??r.yearCode??r.anno);const elementLabel=r.element??r.Element??r.element_label??r.elementName??r.elementLabel??'';const elementCode=String(r.element_code??r.elementCode??r.ElementCode??'');const itemCode=String(r.item_code??r.itemCode??r.ItemCode??r.item??'');const itemLabel=String(r.item_label??r.itemName??r.item??r.Item??'');const areaCode=String(r.area_code??r.areaCode??r.AreaCode??r.area??'');const areaLabel=String(r.area_label??r.areaName??r.area??r.Area??'');const value=toNum(r.value??r.Value??r.valore);if(!Number.isInteger(year)||value===null)return null;return {year,elementLabel:String(elementLabel),elementCode,itemCode,itemLabel,areaCode,areaLabel,value,key:normEl(elementLabel,elementCode)};}).filter(Boolean);if(!rows.length){const sample=(typeof $json==='object')?JSON.stringify($json).slice(0,400):String($json);throw new Error('FAOSTAT QCL returned no usable rows. Raw='+sample);}const byYear=new Map();for(const row of rows){const e=byYear.get(row.year)||{year:row.year,production_t:null,yield_kgha:null,export_t:null,area_ha:null,harvested_area_ha:null,raw:[]};if(row.key!=='other'){e[row.key]=row.value;}e.raw.push({element:row.elementLabel,element_code:row.elementCode,value:row.value});byYear.set(row.year,e);}const yearly=Array.from(byYear.values()).sort((a,b)=>a.year-b.year).map((r)=>({year:r.year,production_t:r.production_t,yield_kgha:r.yield_kgha,export_t:r.export_t,area_ha:r.area_ha,harvested_area_ha:r.harvested_area_ha}));const latest=yearly[yearly.length-1];const previous=yearly.length>1?yearly[yearly.length-2]:null;const yoyProduction=pct(latest.production_t,previous?previous.production_t:null);const yoyYield=pct(latest.yield_kgha,previous?previous.yield_kgha:null);const yoyExport=pct(latest.export_t,previous?previous.export_t:null);const movementLabel=(yoyProduction!==null&&yoyProduction>=5)?'supply_expanding':(yoyProduction!==null&&yoyProduction<=-5)?'supply_tightening':'stable';const signals=[];if(yoyProduction!==null&&yoyProduction>=5)signals.push('production_up');if(yoyProduction!==null&&yoyProduction<=-5)signals.push('production_down');if(yoyYield!==null&&yoyYield<=-5)signals.push('yield_down');if(yoyExport!==null&&yoyExport>=5)signals.push('exports_up');const itemCode=rows[0].itemCode||'656';const itemName=rows[0].itemLabel||'Coffee, green';const areaCode=rows[0].areaCode||'21';const areaName=rows[0].areaLabel||'Brazil';const summary='FAOSTAT QCL latest year '+latest.year+' for '+areaName+' reports production '+(latest.production_t===null?'n/a':latest.production_t)+' t and yield '+(latest.yield_kgha===null?'n/a':latest.yield_kgha)+' kg/ha.'+(previous?' Versus '+previous.year+', production changed by '+(yoyProduction===null?'n/a':yoyProduction.toFixed(4))+'%.':'');const latestRaw=(byYear.get(latest.year)||{raw:[]}).raw.slice(0,50);return [{json:{source:'FAOSTAT_QCL',source_format:'json_api',source_base_url:'https://faostatservices.fao.org/api/v1',source_url:'https://faostatservices.fao.org/api/v1',dataset_code:'QCL',country:'BR',macroarea:'colture',collected_at:now,area_code:areaCode,area_name:areaName,item_code:itemCode,item_name:itemName,element_codes_requested:['2312','2413','2510','2111','2313'],latest_year:latest.year,latest,previous,derived_metrics:{yoy_production_pct:yoyProduction,yoy_yield_pct:yoyYield,yoy_export_pct:yoyExport},movement_label:movementLabel,signals,summary_en:summary,yearly_series:yearly,raw_latest:latestRaw,_chart_fields:['yearly_series','raw_latest']}}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -880,
-        -2680
+        2340,
+        0
       ],
       "id": "faostat-parse-qcl-node",
       "name": "FAOSTAT Parse QCL"
@@ -223,8 +223,8 @@
       "type": "n8n-nodes-base.mongoDb",
       "typeVersion": 1,
       "position": [
-        -640,
-        -2680
+        3120,
+        0
       ],
       "id": "faostat-mongo-raw-crops-node",
       "name": "FAOSTAT MongoDB raw_crops",
@@ -242,8 +242,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -400,
-        -2680
+        3380,
+        0
       ],
       "id": "faostat-build-log-node",
       "name": "FAOSTAT Build Ingestion Log"
@@ -257,8 +257,8 @@
       "type": "n8n-nodes-base.mongoDb",
       "typeVersion": 1,
       "position": [
-        -160,
-        -2680
+        3640,
+        0
       ],
       "id": "faostat-mongo-log-node",
       "name": "FAOSTAT MongoDB ingestion_log",
@@ -285,8 +285,8 @@
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
       "typeVersion": 1.5,
       "position": [
-        -400,
-        -2680
+        2600,
+        0
       ],
       "id": "faostat-ai-signals-node",
       "name": "FAOSTAT AI Signals",
@@ -308,8 +308,8 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1.3,
       "position": [
-        -400,
-        -2480
+        2600,
+        240
       ],
       "id": "faostat-openai-signals-node",
       "name": "FAOSTAT OpenAI Signals Model",
@@ -329,8 +329,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -160,
-        -2680
+        2860,
+        0
       ],
       "id": "faostat-parse-signals-node",
       "name": "FAOSTAT Parse Signals"
@@ -342,8 +342,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1840,
-        -2680
+        260,
+        0
       ],
       "id": "faostat-build-login-payload-node",
       "name": "FAOSTAT Build Login Payload"
@@ -354,8 +354,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1380,
-        -2680
+        780,
+        0
       ],
       "parameters": {
         "jsCode": "const item = $input.first();\nconst err = item.json?.error ?? item.error?.message ?? '';\nconst statusCode = item.json?.statusCode ?? item.json?.status ?? 0;\nif (err || statusCode >= 400) {\n  return [{ json: {\n    _api_skip: true,\n    source: '06_FAOSTAT_QCL',\n    country: 'BR',\n    status: 'skipped_api_error',\n    reason: `API unavailable: ${err || 'HTTP ' + statusCode}`,\n    run_date: new Date().toISOString(),\n    completed_at: new Date().toISOString()\n  } }];\n}\nreturn [{ json: item.json }];"
@@ -367,8 +367,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        -1160,
-        -2680
+        1040,
+        0
       ],
       "parameters": {
         "conditions": {
@@ -398,8 +398,8 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        40,
-        -2680
+        3900,
+        0
       ],
       "parameters": {
         "mode": "manual",
@@ -434,8 +434,8 @@
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1,
       "position": [
-        -2480,
-        -2696
+        0,
+        -200
       ],
       "id": "execute-workflow-trigger-Nr0Nhjb6",
       "name": "Execute Workflow Trigger"

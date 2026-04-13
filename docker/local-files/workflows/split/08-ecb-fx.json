@@ -6,8 +6,8 @@
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
-        -2000,
-        -2180
+        0,
+        0
       ],
       "id": "manual-trigger-ecb",
       "name": "Manual Trigger"
@@ -26,15 +26,15 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        -2000,
-        -2060
+        0,
+        200
       ],
       "id": "schedule-trigger-ecb",
       "name": "Schedule Trigger"
     },
     {
       "parameters": {
-        "url": "={{ (() => { const lookbackDays = 180; const end = new Date(); const start = new Date(end); start.setDate(start.getDate() - lookbackDays); const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; return `https://data-api.ecb.europa.eu/service/data/EXR/D.BRL.EUR.SP00.A?startPeriod=${fmt(start)}&endPeriod=${fmt(end)}&detail=dataonly&format=csvdata`; })() }}",
+        "url": "={{ (() => { const lookbackDays = 3650; const end = new Date(); const start = new Date(end); start.setDate(start.getDate() - lookbackDays); const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; return `https://data-api.ecb.europa.eu/service/data/EXR/D.BRL.EUR.SP00.A?startPeriod=${fmt(start)}&endPeriod=${fmt(end)}&detail=dataonly&format=csvdata`; })() }}",
         "options": {
           "response": {
             "response": {
@@ -47,8 +47,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -1600,
-        -2120
+        260,
+        0
       ],
       "id": "ecb-download-node",
       "name": "ECB Data Portal Download",
@@ -57,13 +57,13 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const raw = $input.first().json.data || '';\nfunction getCollectedPeriod(isoTs, cadenza) {\n  const d = new Date(isoTs || new Date().toISOString());\n  const pad = n => String(n).padStart(2, '0');\n  const yyyy = d.getUTCFullYear();\n  const mm = pad(d.getUTCMonth() + 1);\n  const dd = pad(d.getUTCDate());\n  const hh = pad(d.getUTCHours());\n  const doy = Math.floor((d - new Date(Date.UTC(yyyy,0,1))) / 86400000);\n  const week = pad(Math.ceil((doy + new Date(Date.UTC(yyyy,0,1)).getUTCDay() + 1) / 7));\n  switch((cadenza||'').toLowerCase()) {\n    case 'hourly':  return `${yyyy}-${mm}-${dd}T${hh}`;\n    case 'daily':   return `${yyyy}-${mm}-${dd}`;\n    case 'weekly':  return `${yyyy}-W${week}`;\n    case 'monthly': return `${yyyy}-${mm}`;\n    default:        return `${yyyy}-${mm}-${dd}`;\n  }\n}\nconst now = new Date().toISOString();\nconst _collectedPeriod = getCollectedPeriod(now, 'daily');\nconst expectedFreshnessHours = 36;\nconst isFresh = (new Date() - new Date(now)) / 3600000 < expectedFreshnessHours;\n\nconst lookbackDays = 180;\nconst end = new Date();\nconst start = new Date(end);\nstart.setDate(start.getDate() - lookbackDays);\nconst seriesKey = 'EXR.D.BRL.EUR.SP00.A';\n\nfunction formatIsoDate(date) {\n  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;\n}\n\nfunction parseCsvLine(line) {\n  const values = [];\n  let current = '';\n  let inQuotes = false;\n\n  for (let i = 0; i < line.length; i++) {\n    const char = line[i];\n\n    if (char === '\"') {\n      if (inQuotes && line[i + 1] === '\"') {\n        current += '\"';\n        i += 1;\n      } else {\n        inQuotes = !inQuotes;\n      }\n    } else if (char === ',' && !inQuotes) {\n      values.push(current);\n      current = '';\n    } else {\n      current += char;\n    }\n  }\n\n  values.push(current);\n  return values;\n}\n\nfunction toNumber(value, decimals = 6) {\n  if (value === null || value === undefined || value === '') return null;\n  const numeric = Number(value);\n  if (Number.isNaN(numeric)) return null;\n  return Number(numeric.toFixed(decimals));\n}\n\nconst lines = raw.split(/\\r?\\n/).filter((line) => line.trim() !== '');\nif (!lines.length) {\n  throw new Error('ECB Data Portal response is empty');\n}\n\nconst headers = parseCsvLine(lines[0]).map((header) => header.trim());\nconst timeIndex = headers.findIndex((header) => header === 'TIME_PERIOD');\nconst valueIndex = headers.findIndex((header) => header === 'OBS_VALUE');\n\nif (timeIndex === -1 || valueIndex === -1) {\n  throw new Error('Unexpected ECB CSV schema: TIME_PERIOD or OBS_VALUE missing');\n}\n\nconst rows = lines.slice(1)\n  .map((line) => {\n    const values = parseCsvLine(line);\n    const timePeriod = (values[timeIndex] ?? '').trim();\n    const obsValue = toNumber((values[valueIndex] ?? '').trim(), 6);\n\n    return {\n      quote_date: timePeriod,\n      fx_rate_brl_per_eur: obsValue\n    };\n  })\n  .filter((row) => row.quote_date && row.fx_rate_brl_per_eur !== null)\n  .sort((a, b) => a.quote_date.localeCompare(b.quote_date));\n\nif (!rows.length) {\n  throw new Error('ECB Data Portal returned no valid FX observations in the selected period');\n}\n\nconst latest = rows[rows.length - 1];\nconst previous = rows.length > 1 ? rows[rows.length - 2] : null;\nconst recentSeries = rows.slice(-10);\nconst fxValues = rows.map((row) => row.fx_rate_brl_per_eur).filter((value) => typeof value === 'number');\nconst minFx = fxValues.length ? Number(Math.min(...fxValues).toFixed(6)) : null;\nconst maxFx = fxValues.length ? Number(Math.max(...fxValues).toFixed(6)) : null;\nconst avgFx = fxValues.length ? Number((fxValues.reduce((sum, value) => sum + value, 0) / fxValues.length).toFixed(6)) : null;\nconst rangeFx = minFx !== null && maxFx !== null ? Number((maxFx - minFx).toFixed(6)) : null;\n\nconst changeVsPrevious = previous ? Number((latest.fx_rate_brl_per_eur - previous.fx_rate_brl_per_eur).toFixed(6)) : null;\nconst changePctVsPrevious = previous && previous.fx_rate_brl_per_eur ? Number((((latest.fx_rate_brl_per_eur - previous.fx_rate_brl_per_eur) / previous.fx_rate_brl_per_eur) * 100).toFixed(6)) : null;\n\nlet movementLabel = 'stable';\nlet summaryEn = `Latest ECB EUR/BRL reference rate on ${latest.quote_date} was ${latest.fx_rate_brl_per_eur.toFixed(6)} BRL per EUR.`;\nconst signals = [\n  `Latest ECB EUR/BRL ${latest.fx_rate_brl_per_eur.toFixed(6)}`,\n  `${lookbackDays}-day EUR/BRL range ${rangeFx !== null ? rangeFx.toFixed(6) : 'n/a'}`,\n  `Series key ${seriesKey}`\n];\n\nif (changeVsPrevious !== null) {\n  if (changeVsPrevious > 0) movementLabel = 'brl_weaker_vs_eur';\n  else if (changeVsPrevious < 0) movementLabel = 'brl_stronger_vs_eur';\n\n  summaryEn += ` Versus the previous observation, the rate changed by ${changeVsPrevious.toFixed(6)} (${changePctVsPrevious.toFixed(6)}%).`;\n  if (movementLabel === 'brl_weaker_vs_eur') {\n    summaryEn += ' This indicates BRL weakening against EUR versus the previous ECB reference rate.';\n    signals.push('BRL weakened versus EUR compared with previous ECB fixing');\n  } else if (movementLabel === 'brl_stronger_vs_eur') {\n    summaryEn += ' This indicates BRL strengthening against EUR versus the previous ECB reference rate.';\n    signals.push('BRL strengthened versus EUR compared with previous ECB fixing');\n  } else {\n    signals.push('ECB EUR/BRL unchanged versus previous fixing');\n  }\n}\n\nreturn [{\n  json: {\n    source: 'ECB_DATA_PORTAL',\n    source_format: 'sdmx_csvdata',\n    source_url_template: 'https://data-api.ecb.europa.eu/service/data/EXR/D.BRL.EUR.SP00.A?...',\n    source_url: 'https://data-api.ecb.europa.eu/service/data/EXR/D.BRL.EUR.SP00.A?...',\n    country: 'BR',\n    macroarea: 'prices',\n    collected_at: now,\n    collected_period: _collectedPeriod,\n        is_fresh: isFresh,\n    dataset: 'EXR',\n    series_key: seriesKey,\n    base_currency: 'EUR',\n    quote_currency: 'BRL',\n    lookback_days: lookbackDays,\n    query_start_date: formatIsoDate(start),\n    query_end_date: formatIsoDate(end),\n    total_quotes: rows.length,\n    quote_date: latest.quote_date,\n    fx_rate_brl_per_eur: latest.fx_rate_brl_per_eur,\n    movement_label: movementLabel,\n    previous_quote_date: previous ? previous.quote_date : null,\n    previous_fx_rate_brl_per_eur: previous ? previous.fx_rate_brl_per_eur : null,\n    change_vs_previous: changeVsPrevious,\n    change_pct_vs_previous: changePctVsPrevious,\n    fx_stats_lookback: {\n      min: minFx,\n      avg: avgFx,\n      max: maxFx,\n      range: rangeFx\n    },\n    recent_series: recentSeries,\n    summary_en: summaryEn,\n    signals,\n    _chart_fields: [\"recent_series\"]\n  }\n}];"
+        "jsCode": "const raw = $input.first().json.data || '';\nfunction getCollectedPeriod(isoTs, cadenza) {\n  const d = new Date(isoTs || new Date().toISOString());\n  const pad = n => String(n).padStart(2, '0');\n  const yyyy = d.getUTCFullYear();\n  const mm = pad(d.getUTCMonth() + 1);\n  const dd = pad(d.getUTCDate());\n  const hh = pad(d.getUTCHours());\n  const doy = Math.floor((d - new Date(Date.UTC(yyyy,0,1))) / 86400000);\n  const week = pad(Math.ceil((doy + new Date(Date.UTC(yyyy,0,1)).getUTCDay() + 1) / 7));\n  switch((cadenza||'').toLowerCase()) {\n    case 'hourly':  return `${yyyy}-${mm}-${dd}T${hh}`;\n    case 'daily':   return `${yyyy}-${mm}-${dd}`;\n    case 'weekly':  return `${yyyy}-W${week}`;\n    case 'monthly': return `${yyyy}-${mm}`;\n    default:        return `${yyyy}-${mm}-${dd}`;\n  }\n}\nconst now = new Date().toISOString();\nconst _collectedPeriod = getCollectedPeriod(now, 'daily');\nconst expectedFreshnessHours = 36;\nconst isFresh = (new Date() - new Date(now)) / 3600000 < expectedFreshnessHours;\n\nconst lookbackDays = 3650;\nconst end = new Date();\nconst start = new Date(end);\nstart.setDate(start.getDate() - lookbackDays);\nconst seriesKey = 'EXR.D.BRL.EUR.SP00.A';\n\nfunction formatIsoDate(date) {\n  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;\n}\n\nfunction parseCsvLine(line) {\n  const values = [];\n  let current = '';\n  let inQuotes = false;\n\n  for (let i = 0; i < line.length; i++) {\n    const char = line[i];\n\n    if (char === '\"') {\n      if (inQuotes && line[i + 1] === '\"') {\n        current += '\"';\n        i += 1;\n      } else {\n        inQuotes = !inQuotes;\n      }\n    } else if (char === ',' && !inQuotes) {\n      values.push(current);\n      current = '';\n    } else {\n      current += char;\n    }\n  }\n\n  values.push(current);\n  return values;\n}\n\nfunction toNumber(value, decimals = 6) {\n  if (value === null || value === undefined || value === '') return null;\n  const numeric = Number(value);\n  if (Number.isNaN(numeric)) return null;\n  return Number(numeric.toFixed(decimals));\n}\n\nconst lines = raw.split(/\\r?\\n/).filter((line) => line.trim() !== '');\nif (!lines.length) {\n  throw new Error('ECB Data Portal response is empty');\n}\n\nconst headers = parseCsvLine(lines[0]).map((header) => header.trim());\nconst timeIndex = headers.findIndex((header) => header === 'TIME_PERIOD');\nconst valueIndex = headers.findIndex((header) => header === 'OBS_VALUE');\n\nif (timeIndex === -1 || valueIndex === -1) {\n  throw new Error('Unexpected ECB CSV schema: TIME_PERIOD or OBS_VALUE missing');\n}\n\nconst rows = lines.slice(1)\n  .map((line) => {\n    const values = parseCsvLine(line);\n    const timePeriod = (values[timeIndex] ?? '').trim();\n    const obsValue = toNumber((values[valueIndex] ?? '').trim(), 6);\n\n    return {\n      quote_date: timePeriod,\n      fx_rate_brl_per_eur: obsValue\n    };\n  })\n  .filter((row) => row.quote_date && row.fx_rate_brl_per_eur !== null)\n  .sort((a, b) => a.quote_date.localeCompare(b.quote_date));\n\nif (!rows.length) {\n  throw new Error('ECB Data Portal returned no valid FX observations in the selected period');\n}\n\nconst latest = rows[rows.length - 1];\nconst previous = rows.length > 1 ? rows[rows.length - 2] : null;\nconst recentSeries = rows;\nconst fxValues = rows.map((row) => row.fx_rate_brl_per_eur).filter((value) => typeof value === 'number');\nconst minFx = fxValues.length ? Number(Math.min(...fxValues).toFixed(6)) : null;\nconst maxFx = fxValues.length ? Number(Math.max(...fxValues).toFixed(6)) : null;\nconst avgFx = fxValues.length ? Number((fxValues.reduce((sum, value) => sum + value, 0) / fxValues.length).toFixed(6)) : null;\nconst rangeFx = minFx !== null && maxFx !== null ? Number((maxFx - minFx).toFixed(6)) : null;\n\nconst changeVsPrevious = previous ? Number((latest.fx_rate_brl_per_eur - previous.fx_rate_brl_per_eur).toFixed(6)) : null;\nconst changePctVsPrevious = previous && previous.fx_rate_brl_per_eur ? Number((((latest.fx_rate_brl_per_eur - previous.fx_rate_brl_per_eur) / previous.fx_rate_brl_per_eur) * 100).toFixed(6)) : null;\n\nlet movementLabel = 'stable';\nlet summaryEn = `Latest ECB EUR/BRL reference rate on ${latest.quote_date} was ${latest.fx_rate_brl_per_eur.toFixed(6)} BRL per EUR.`;\nconst signals = [\n  `Latest ECB EUR/BRL ${latest.fx_rate_brl_per_eur.toFixed(6)}`,\n  `${lookbackDays}-day EUR/BRL range ${rangeFx !== null ? rangeFx.toFixed(6) : 'n/a'}`,\n  `Series key ${seriesKey}`\n];\n\nif (changeVsPrevious !== null) {\n  if (changeVsPrevious > 0) movementLabel = 'brl_weaker_vs_eur';\n  else if (changeVsPrevious < 0) movementLabel = 'brl_stronger_vs_eur';\n\n  summaryEn += ` Versus the previous observation, the rate changed by ${changeVsPrevious.toFixed(6)} (${changePctVsPrevious.toFixed(6)}%).`;\n  if (movementLabel === 'brl_weaker_vs_eur') {\n    summaryEn += ' This indicates BRL weakening against EUR versus the previous ECB reference rate.';\n    signals.push('BRL weakened versus EUR compared with previous ECB fixing');\n  } else if (movementLabel === 'brl_stronger_vs_eur') {\n    summaryEn += ' This indicates BRL strengthening against EUR versus the previous ECB reference rate.';\n    signals.push('BRL strengthened versus EUR compared with previous ECB fixing');\n  } else {\n    signals.push('ECB EUR/BRL unchanged versus previous fixing');\n  }\n}\n\nreturn [{\n  json: {\n    source: 'ECB_DATA_PORTAL',\n    source_format: 'sdmx_csvdata',\n    source_url_template: 'https://data-api.ecb.europa.eu/service/data/EXR/D.BRL.EUR.SP00.A?...',\n    source_url: 'https://data-api.ecb.europa.eu/service/data/EXR/D.BRL.EUR.SP00.A?...',\n    country: 'BR',\n    macroarea: 'prices',\n    collected_at: now,\n    collected_period: _collectedPeriod,\n        is_fresh: isFresh,\n    dataset: 'EXR',\n    series_key: seriesKey,\n    base_currency: 'EUR',\n    quote_currency: 'BRL',\n    lookback_days: lookbackDays,\n    query_start_date: formatIsoDate(start),\n    query_end_date: formatIsoDate(end),\n    total_quotes: rows.length,\n    quote_date: latest.quote_date,\n    fx_rate_brl_per_eur: latest.fx_rate_brl_per_eur,\n    movement_label: movementLabel,\n    previous_quote_date: previous ? previous.quote_date : null,\n    previous_fx_rate_brl_per_eur: previous ? previous.fx_rate_brl_per_eur : null,\n    change_vs_previous: changeVsPrevious,\n    change_pct_vs_previous: changePctVsPrevious,\n    fx_stats_lookback: {\n      min: minFx,\n      avg: avgFx,\n      max: maxFx,\n      range: rangeFx\n    },\n    recent_series: recentSeries,\n    summary_en: summaryEn,\n    signals,\n    _chart_fields: [\"recent_series\"]\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1360,
-        -2120
+        1040,
+        0
       ],
       "id": "ecb-parse-node",
       "name": "ECB Data Portal Parse"
@@ -72,14 +72,14 @@
       "parameters": {
         "operation": "insert",
         "collection": "raw_prices",
-        "options": {},
-        "fields": "source,source_url,source_format,source_url_template,country,macroarea,collected_at,dataset,series_key,base_currency,quote_currency,lookback_days,query_start_date,query_end_date,total_quotes,quote_date,fx_rate_brl_per_eur,movement_label,previous_quote_date,previous_fx_rate_brl_per_eur,change_vs_previous,change_pct_vs_previous,fx_stats_lookback,recent_series,summary_en,signals"
+        "fields": "source,source_url,source_format,source_url_template,country,macroarea,collected_at,dataset,series_key,base_currency,quote_currency,lookback_days,query_start_date,query_end_date,total_quotes,quote_date,fx_rate_brl_per_eur,movement_label,previous_quote_date,previous_fx_rate_brl_per_eur,change_vs_previous,change_pct_vs_previous,fx_stats_lookback,recent_series,summary_en,signals,_chart_fields,collected_period",
+        "options": {}
       },
       "type": "n8n-nodes-base.mongoDb",
       "typeVersion": 1,
       "position": [
-        -1120,
-        -2120
+        1820,
+        0
       ],
       "id": "ecb-mongo-raw-prices-node",
       "name": "ECB MongoDB raw_prices",
@@ -88,7 +88,9 @@
           "id": "Jo4ZHZCY4HM8JRrD",
           "name": "MongoDB account"
         }
-      }
+      },
+      "onError": "continueRegularOutput",
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -98,8 +100,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -880,
-        -2120
+        2080,
+        0
       ],
       "id": "ecb-build-log-node",
       "name": "ECB Build Ingestion Log"
@@ -113,8 +115,8 @@
       "type": "n8n-nodes-base.mongoDb",
       "typeVersion": 1,
       "position": [
-        -640,
-        -2120
+        2340,
+        0
       ],
       "id": "ecb-mongo-log-node",
       "name": "ECB MongoDB ingestion_log",
@@ -141,8 +143,8 @@
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
       "typeVersion": 1.5,
       "position": [
-        -880,
-        -2120
+        1300,
+        0
       ],
       "id": "ecb-ai-signals-node",
       "name": "ECB AI Signals",
@@ -164,8 +166,8 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1.3,
       "position": [
-        -880,
-        -1920
+        1300,
+        240
       ],
       "id": "ecb-openai-signals-node",
       "name": "ECB OpenAI Signals Model",
@@ -186,8 +188,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -640,
-        -2120
+        1560,
+        0
       ],
       "id": "ecb-parse-signals-node",
       "name": "ECB Parse Signals"
@@ -198,8 +200,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1380,
-        -2120
+        520,
+        0
       ],
       "parameters": {
         "jsCode": "const item = $input.first();\nconst err = item.json?.error ?? item.error?.message ?? '';\nconst statusCode = item.json?.statusCode ?? item.json?.status ?? 0;\nif (err || statusCode >= 400) {\n  return [{ json: {\n    _api_skip: true,\n    source: '08_ECB_FX',\n    country: 'BR',\n    status: 'skipped_api_error',\n    reason: `API unavailable: ${err || 'HTTP ' + statusCode}`,\n    run_date: new Date().toISOString(),\n    completed_at: new Date().toISOString()\n  } }];\n}\nreturn [{ json: item.json }];"
@@ -211,8 +213,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        -1160,
-        -2120
+        780,
+        0
       ],
       "parameters": {
         "conditions": {
@@ -242,8 +244,8 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -440,
-        -2120
+        2600,
+        0
       ],
       "parameters": {
         "mode": "manual",
@@ -278,8 +280,8 @@
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1,
       "position": [
-        -2240,
-        -2105
+        0,
+        -200
       ],
       "id": "execute-workflow-trigger-C17pmMtR",
       "name": "Execute Workflow Trigger"

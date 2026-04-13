@@ -6,8 +6,8 @@
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
-        -2000,
-        -4500
+        0,
+        0
       ],
       "id": "manual-trigger-port",
       "name": "Manual Trigger"
@@ -26,8 +26,8 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        -2000,
-        -4380
+        0,
+        200
       ],
       "id": "schedule-trigger-port",
       "name": "Schedule Trigger"
@@ -55,8 +55,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -1600,
-        -4440
+        260,
+        0
       ],
       "id": "port-congestion-snapshot-node",
       "name": "Port Congestion Snapshot",
@@ -69,8 +69,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1360,
-        -4440
+        1040,
+        0
       ],
       "id": "port-congestion-parse-node",
       "name": "Port Congestion Parse"
@@ -85,8 +85,8 @@
       "type": "n8n-nodes-base.mongoDb",
       "typeVersion": 1,
       "position": [
-        -1120,
-        -4440
+        1300,
+        0
       ],
       "id": "port-mongodb-raw-geo-node",
       "name": "Port MongoDB raw_geo",
@@ -132,8 +132,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -880,
-        -4440
+        1560,
+        0
       ],
       "id": "port-openai-embeddings-node",
       "name": "Port OpenAI Embeddings",
@@ -151,8 +151,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -640,
-        -4440
+        1820,
+        0
       ],
       "id": "port-build-qdrant-payload-node",
       "name": "Port Build Qdrant Payload"
@@ -180,8 +180,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -400,
-        -4440
+        2080,
+        0
       ],
       "id": "port-qdrant-upsert-node",
       "name": "Port Qdrant Upsert"
@@ -193,8 +193,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -160,
-        -4440
+        2340,
+        0
       ],
       "id": "port-build-ingestion-log-node",
       "name": "Port Build Ingestion Log"
@@ -208,8 +208,8 @@
       "type": "n8n-nodes-base.mongoDb",
       "typeVersion": 1,
       "position": [
-        60,
-        -4440
+        2600,
+        0
       ],
       "id": "port-mongodb-ingestion-log-node",
       "name": "Port MongoDB ingestion_log",
@@ -226,8 +226,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1380,
-        -4440
+        520,
+        0
       ],
       "parameters": {
         "jsCode": "const item = $input.first();\nconst err = item.json?.error ?? item.error?.message ?? '';\nconst statusCode = item.json?.statusCode ?? item.json?.status ?? 0;\nif (err || statusCode >= 400) {\n  return [{ json: {\n    _api_skip: true,\n    source: '02_PORT_CONGESTION',\n    country: 'BR',\n    status: 'skipped_api_error',\n    reason: `API unavailable: ${err || 'HTTP ' + statusCode}`,\n    run_date: new Date().toISOString(),\n    completed_at: new Date().toISOString()\n  } }];\n}\nreturn [{ json: item.json }];"
@@ -239,8 +239,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        -1160,
-        -4440
+        780,
+        0
       ],
       "parameters": {
         "conditions": {
@@ -270,8 +270,8 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        260,
-        -4440
+        2860,
+        0
       ],
       "parameters": {
         "mode": "manual",
@@ -306,8 +306,8 @@
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1,
       "position": [
-        -2240,
-        -4440
+        0,
+        -200
       ],
       "id": "execute-workflow-trigger-NSpu99gf",
       "name": "Execute Workflow Trigger"

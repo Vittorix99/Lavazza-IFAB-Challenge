@@ -20,12 +20,25 @@ from utils.split_doc import split_doc
 from utils.geo_utils import tag_fires_with_coffee_zones
 
 
+import re as _re
+
+# Fallback cadenze per fonti che non memorizzano 'cadenza' nel documento raw
+_SOURCE_CADENCE = {
+    "NOAA_ENSO": "monthly",
+    "NASA_FIRMS": "hourly",
+}
+
+
 def _compute_freshness(doc: dict, demo_mode: bool) -> dict:
     """
-    Calcola freschezza usando il campo 'cadenza' del documento stesso.
-    Schema-agnostico: legge il valore di cadenza direttamente dal doc.
+    Calcola freschezza usando il campo 'cadenza' del documento stesso,
+    con fallback sulla mappa _SOURCE_CADENCE per fonti che non lo memorizzano.
     """
-    cadence = str(doc.get("cadenza", "unknown")).lower()
+    cadence = str(doc.get("cadenza", "")).strip().lower()
+    if not cadence or cadence == "unknown":
+        source = str(doc.get("source", "")).upper()
+        cadence = _SOURCE_CADENCE.get(source, "unknown")
+
     thresholds = {
         "hourly": 1,
         "daily": 2,
@@ -36,16 +49,17 @@ def _compute_freshness(doc: dict, demo_mode: bool) -> dict:
     threshold = thresholds.get(cadence, 30)
 
     try:
-        dt = datetime.fromisoformat(
-            str(doc.get("collected_at", "")).replace("Z", "+00:00")
-        )
+        raw_ts = str(doc.get("collected_at", "")).strip()
+        # Rimuove la parte millisecondo (es. .000) per compatibilità Python < 3.11
+        raw_ts = _re.sub(r"\.\d+", "", raw_ts).replace("Z", "+00:00")
+        dt = datetime.fromisoformat(raw_ts)
         days_old = (datetime.now(timezone.utc) - dt).days
     except Exception:
-        days_old = 999
+        days_old = None
 
     return {
         "days_old": days_old,
-        "is_fresh": demo_mode or (days_old <= threshold),
+        "is_fresh": demo_mode or (days_old is not None and days_old <= threshold),
         "cadenza": cadence,
     }
 

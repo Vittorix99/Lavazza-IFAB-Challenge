@@ -6,8 +6,8 @@
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
-        -2000,
-        -3900
+        0,
+        0
       ],
       "id": "manual-trigger-conab",
       "name": "Manual Trigger"
@@ -26,8 +26,8 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        -2000,
-        -3780
+        0,
+        200
       ],
       "id": "schedule-trigger-conab",
       "name": "Schedule Trigger"
@@ -47,8 +47,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -1600,
-        -3840
+        260,
+        0
       ],
       "id": "conab-index-download-node",
       "name": "CONAB Index Download",
@@ -61,8 +61,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -880,
-        -3840
+        1560,
+        0
       ],
       "id": "conab-parse-latest-release-node",
       "name": "CONAB Parse Latest Release"
@@ -83,8 +83,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -1120,
-        -3840
+        1820,
+        0
       ],
       "id": "conab-download-table-node",
       "name": "CONAB Download Table"
@@ -102,8 +102,8 @@
       "type": "n8n-nodes-base.extractFromFile",
       "typeVersion": 1.1,
       "position": [
-        -880,
-        -3840
+        2080,
+        0
       ],
       "id": "conab-extract-table-node",
       "name": "CONAB Extract Table"
@@ -115,8 +115,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -640,
-        -3840
+        2340,
+        0
       ],
       "id": "conab-parse-table-node",
       "name": "CONAB Parse Table"
@@ -137,8 +137,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -400,
-        -3840
+        2600,
+        0
       ],
       "id": "conab-download-pdf-node",
       "name": "CONAB Download PDF"
@@ -152,8 +152,8 @@
       "type": "n8n-nodes-base.extractFromFile",
       "typeVersion": 1.1,
       "position": [
-        -160,
-        -3840
+        2860,
+        0
       ],
       "id": "conab-extract-pdf-node",
       "name": "CONAB Extract PDF"
@@ -174,8 +174,8 @@
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
       "typeVersion": 1.9,
       "position": [
-        80,
-        -3840
+        3120,
+        0
       ],
       "id": "conab-ai-signals-chain-node",
       "name": "CONAB AI Signals",
@@ -197,8 +197,8 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1.3,
       "position": [
-        80,
-        -3640
+        3120,
+        240
       ],
       "id": "conab-openai-signals-node",
       "name": "CONAB OpenAI Signals Model",
@@ -218,8 +218,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        320,
-        -3840
+        3380,
+        0
       ],
       "id": "conab-parse-signals-node",
       "name": "CONAB Parse Signals"
@@ -234,8 +234,8 @@
       "type": "n8n-nodes-base.mongoDb",
       "typeVersion": 1,
       "position": [
-        540,
-        -3840
+        3640,
+        0
       ],
       "id": "conab-mongo-raw-crops-node",
       "name": "CONAB MongoDB raw_crops",
@@ -281,8 +281,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        760,
-        -3840
+        3900,
+        0
       ],
       "id": "conab-embeddings-node",
       "name": "CONAB OpenAI Embeddings",
@@ -300,8 +300,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        980,
-        -3840
+        4160,
+        0
       ],
       "id": "conab-qdrant-payload-node",
       "name": "CONAB Build Qdrant Payload"
@@ -329,8 +329,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        1200,
-        -3840
+        4420,
+        0
       ],
       "id": "conab-qdrant-upsert-node",
       "name": "CONAB Qdrant Upsert"
@@ -342,8 +342,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1420,
-        -3840
+        4680,
+        0
       ],
       "id": "conab-build-log-node",
       "name": "CONAB Build Ingestion Log"
@@ -357,8 +357,8 @@
       "type": "n8n-nodes-base.mongoDb",
       "typeVersion": 1,
       "position": [
-        1640,
-        -3840
+        4940,
+        0
       ],
       "id": "conab-mongo-log-node",
       "name": "CONAB MongoDB ingestion_log",
@@ -376,8 +376,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1360,
-        -3840
+        1040,
+        0
       ],
       "id": "conab-extract-lev-url-node",
       "name": "CONAB Extract Levantamento URL"
@@ -397,8 +397,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -1120,
-        -3840
+        1300,
+        0
       ],
       "id": "conab-fetch-lev-page-node",
       "name": "CONAB Fetch Levantamento Page"
@@ -409,8 +409,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1380,
-        -3840
+        520,
+        0
       ],
       "parameters": {
         "jsCode": "const item = $input.first();\nconst err = item.json?.error ?? item.error?.message ?? '';\nconst statusCode = item.json?.statusCode ?? item.json?.status ?? 0;\nif (err || statusCode >= 400) {\n  return [{ json: {\n    _api_skip: true,\n    source: '03_CONAB',\n    country: 'BR',\n    status: 'skipped_api_error',\n    reason: `API unavailable: ${err || 'HTTP ' + statusCode}`,\n    run_date: new Date().toISOString(),\n    completed_at: new Date().toISOString()\n  } }];\n}\nreturn [{ json: item.json }];"
@@ -422,8 +422,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        -1160,
-        -3840
+        780,
+        0
       ],
       "parameters": {
         "conditions": {
@@ -453,8 +453,8 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        1840,
-        -3840
+        5200,
+        0
       ],
       "parameters": {
         "mode": "manual",
@@ -489,8 +489,8 @@
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1,
       "position": [
-        -2240,
-        -3832
+        0,
+        -200
       ],
       "id": "execute-workflow-trigger-2CzBgXVD",
       "name": "Execute Workflow Trigger"

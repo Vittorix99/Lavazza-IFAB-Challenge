@@ -6,8 +6,8 @@
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
-        -2192,
-        -5040
+        0,
+        0
       ],
       "id": "manual-trigger-comex",
       "name": "Manual Trigger"
@@ -26,8 +26,8 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        -2000,
-        -4896
+        0,
+        200
       ],
       "id": "schedule-trigger-comex",
       "name": "Schedule Trigger"
@@ -43,8 +43,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -1728,
-        -5072
+        260,
+        0
       ],
       "id": "comex-updated-check-node",
       "name": "Comex Updated Check",
@@ -60,8 +60,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1360,
-        -4960
+        1040,
+        0
       ],
       "id": "comex-build-query-params-node",
       "name": "Comex Build Query Params"
@@ -96,8 +96,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -1008,
-        -5136
+        1560,
+        0
       ],
       "id": "comex-state-series-node",
       "name": "Comex Fetch State Series Window",
@@ -112,8 +112,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -640,
-        -4960
+        3380,
+        0
       ],
       "id": "comex-parse-node",
       "name": "Comex Parse"
@@ -134,8 +134,8 @@
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
       "typeVersion": 1.9,
       "position": [
-        -400,
-        -5088
+        3640,
+        0
       ],
       "id": "comex-ai-signals-chain-node",
       "name": "Comex AI Signals",
@@ -157,8 +157,8 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1.3,
       "position": [
-        -400,
-        -4880
+        3640,
+        240
       ],
       "id": "comex-openai-signals-node",
       "name": "Comex OpenAI Signals Model",
@@ -178,8 +178,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -160,
-        -4960
+        3900,
+        0
       ],
       "id": "comex-parse-signals-node",
       "name": "Comex Parse Signals"
@@ -194,8 +194,8 @@
       "type": "n8n-nodes-base.mongoDb",
       "typeVersion": 1,
       "position": [
-        80,
-        -4960
+        4160,
+        0
       ],
       "id": "comex-mongo-raw-crops-node",
       "name": "Comex MongoDB raw_crops",
@@ -213,8 +213,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        320,
-        -4960
+        4420,
+        0
       ],
       "id": "comex-build-log-node",
       "name": "Comex Build Ingestion Log"
@@ -229,8 +229,8 @@
       "type": "n8n-nodes-base.mongoDb",
       "typeVersion": 1,
       "position": [
-        560,
-        -4960
+        4680,
+        0
       ],
       "id": "comex-mongo-log-node",
       "name": "Comex MongoDB ingestion_log",
@@ -248,8 +248,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1008,
-        -4960
+        2340,
+        0
       ],
       "id": "comex-wait-node",
       "name": "Comex Wait"
@@ -261,8 +261,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1248,
-        -4960
+        1300,
+        0
       ],
       "id": "comex-wait-pre-state-node",
       "name": "Comex Wait Pre State"
@@ -297,8 +297,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -528,
-        -4960
+        2600,
+        0
       ],
       "id": "comex-port-snapshot-node",
       "name": "Comex Port Snapshot",
@@ -313,8 +313,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -880,
-        -4960
+        1820,
+        0
       ],
       "id": "comex-wait-pre-state-tail-node",
       "name": "Comex Wait Pre State Tail"
@@ -349,8 +349,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -848,
-        -5136
+        2080,
+        0
       ],
       "id": "comex-state-series-prev-tail-node",
       "name": "Comex Fetch State Series Previous Tail",
@@ -365,8 +365,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -640,
-        -5168
+        2860,
+        0
       ],
       "id": "comex-wait-pre-port-tail-node",
       "name": "Comex Wait Pre Port Tail"
@@ -401,8 +401,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -288,
-        -4960
+        3120,
+        0
       ],
       "id": "comex-port-snapshot-prev-tail-node",
       "name": "Comex Port Snapshot Previous Tail",
@@ -419,8 +419,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1520,
-        -5184
+        520,
+        0
       ]
     },
     {
@@ -451,8 +451,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        -1264,
-        -5200
+        780,
+        0
       ]
     },
     {
@@ -486,8 +486,8 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        768,
-        -4960
+        4940,
+        0
       ]
     },
     {
@@ -495,8 +495,8 @@
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1,
       "position": [
-        -2432,
-        -5015
+        0,
+        -200
       ],
       "id": "execute-workflow-trigger-6b8xxkCb",
       "name": "Execute Workflow Trigger"

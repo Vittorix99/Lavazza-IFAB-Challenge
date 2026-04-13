@@ -43,16 +43,16 @@ _FRESHNESS_DAYS = {"settimanale": 10, "mensile": 35}
 
 def _freshness(doc: dict, cadence: str, demo_mode: bool) -> dict:
     try:
-        dt = datetime.fromisoformat(
-            str(doc.get("collected_at", "")).replace("Z", "+00:00")
-        )
+        raw_ts = str(doc.get("collected_at", "")).strip()
+        raw_ts = re.sub(r"\.\d+", "", raw_ts).replace("Z", "+00:00")
+        dt = datetime.fromisoformat(raw_ts)
         days_old = (datetime.now(timezone.utc) - dt).days
     except Exception:
-        days_old = 999
+        days_old = None
     threshold = _FRESHNESS_DAYS.get(cadence, 30)
     return {
         "days_old": days_old,
-        "is_fresh": demo_mode or (days_old <= threshold),
+        "is_fresh": demo_mode or (days_old is not None and days_old <= threshold),
         "cadenza": cadence,
     }
 

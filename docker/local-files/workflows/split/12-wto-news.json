@@ -6,8 +6,8 @@
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
-        -2300,
-        -260
+        0,
+        0
       ],
       "id": "manual-trigger-wto",
       "name": "Manual Trigger"
@@ -26,8 +26,8 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        -2300,
-        -140
+        0,
+        200
       ],
       "id": "schedule-trigger-wto",
       "name": "Schedule Trigger"
@@ -60,8 +60,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
       "position": [
-        -1900,
-        -200
+        260,
+        0
       ],
       "id": "wto-http-fetch-node",
       "name": "WTO HTTP Fetch",
@@ -74,8 +74,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1600,
-        -200
+        1040,
+        100
       ],
       "id": "wto-parse-rss-node",
       "name": "WTO Parse RSS"
@@ -87,8 +87,8 @@
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
       "position": [
-        -1160,
-        -200
+        1300,
+        0
       ],
       "id": "wto-loop-node",
       "name": "WTO Loop"
@@ -101,8 +101,8 @@
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
-        -960,
-        -200
+        1560,
+        0
       ],
       "id": "wto-wait-node",
       "name": "WTO Wait",
@@ -124,8 +124,8 @@
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
       "typeVersion": 1.9,
       "position": [
-        -740,
-        -200
+        1820,
+        0
       ],
       "id": "wto-llm-filter-node",
       "name": "WTO LLM Filter",
@@ -147,8 +147,8 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1.3,
       "position": [
-        -740,
-        0
+        1820,
+        240
       ],
       "id": "wto-openai-filter-node",
       "name": "WTO OpenAI Filter Model",
@@ -168,8 +168,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -520,
-        -200
+        2080,
+        0
       ],
       "id": "wto-parse-filter-node",
       "name": "WTO Parse Filter"
@@ -202,8 +202,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        -300,
-        -200
+        2340,
+        0
       ],
       "id": "wto-if-node",
       "name": "WTO If"
@@ -224,8 +224,8 @@
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
       "typeVersion": 1.9,
       "position": [
-        400,
-        -200
+        2600,
+        0
       ],
       "id": "wto-extract-signals-node",
       "name": "WTO Extract Signals",
@@ -247,8 +247,8 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1.3,
       "position": [
-        400,
-        0
+        2600,
+        240
       ],
       "id": "wto-openai-extract-node",
       "name": "WTO OpenAI Extract Model",
@@ -268,8 +268,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        640,
-        -200
+        2860,
+        0
       ],
       "id": "wto-parse-signals-node",
       "name": "WTO Parse Signals"
@@ -284,8 +284,8 @@
       "type": "n8n-nodes-base.mongoDb",
       "typeVersion": 1,
       "position": [
-        860,
-        -200
+        3120,
+        0
       ],
       "id": "wto-mongo-raw-geo-node",
       "name": "WTO MongoDB raw_geo",
@@ -331,8 +331,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        1080,
-        -200
+        3380,
+        0
       ],
       "id": "wto-embeddings-node",
       "name": "WTO OpenAI Embeddings",
@@ -350,8 +350,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1300,
-        -200
+        3640,
+        0
       ],
       "id": "wto-qdrant-payload-node",
       "name": "WTO Build Qdrant Payload"
@@ -379,8 +379,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        1520,
-        -200
+        3900,
+        0
       ],
       "id": "wto-qdrant-upsert-node",
       "name": "WTO Qdrant Upsert"
@@ -392,8 +392,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -680,
-        -380
+        4160,
+        0
       ],
       "id": "wto-build-log-node",
       "name": "WTO Build Ingestion Log"
@@ -407,8 +407,8 @@
       "type": "n8n-nodes-base.mongoDb",
       "typeVersion": 1,
       "position": [
-        -460,
-        -380
+        1040,
+        -100
       ],
       "id": "wto-mongo-log-node",
       "name": "WTO MongoDB ingestion_log",
@@ -434,8 +434,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4,
       "position": [
-        -60,
-        -200
+        4420,
+        0
       ],
       "id": "wto-scrape-article-node",
       "name": "WTO Scrape Article"
@@ -447,8 +447,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        160,
-        -200
+        4680,
+        0
       ],
       "id": "wto-strip-html-node",
       "name": "WTO Strip HTML"
@@ -459,8 +459,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1680,
-        -200
+        520,
+        0
       ],
       "parameters": {
         "jsCode": "const item = $input.first();\nconst err = item.json?.error ?? item.error?.message ?? '';\nconst statusCode = item.json?.statusCode ?? item.json?.status ?? 0;\nif (err || statusCode >= 400) {\n  return [{ json: {\n    _api_skip: true,\n    source: '12_WTO_NEWS',\n    country: 'BR',\n    status: 'skipped_api_error',\n    reason: `API unavailable: ${err || 'HTTP ' + statusCode}`,\n    run_date: new Date().toISOString(),\n    completed_at: new Date().toISOString()\n  } }];\n}\nreturn [{ json: item.json }];"
@@ -472,8 +472,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        -1460,
-        -200
+        780,
+        0
       ],
       "parameters": {
         "conditions": {
@@ -503,8 +503,8 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -260,
-        -380
+        4940,
+        0
       ],
       "parameters": {
         "mode": "manual",
@@ -539,8 +539,8 @@
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1,
       "position": [
-        -2540,
-        -206
+        0,
+        -200
       ],
       "id": "execute-workflow-trigger-XVj94x5m",
       "name": "Execute Workflow Trigger"

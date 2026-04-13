@@ -128,22 +128,121 @@ def _render_area_scores(signals: list[dict]) -> None:
             st.progress(int(s) / 100)
 
 
+_INTENSITY_ORDER = {"high": 0, "medium": 1, "low": 2}
+_INTENSITY_COLOR = {
+    "high":   ("#f8d7da", "#721c24", "🔴"),
+    "medium": ("#fff3cd", "#856404", "🟡"),
+    "low":    ("#d4edda", "#155724", "🟢"),
+}
+_DIRECTION_LABEL = {"positive": "↑ Positivo", "negative": "↓ Negativo", "neutral": "→ Neutro"}
+
+
 def _render_signals_detail(signals: list[dict], area_filter: list[str]) -> None:
-    for sig in signals:
-        if sig.get("area") not in area_filter:
-            continue
-        if sig.get("source", "").endswith("_AGENT"):
-            continue
-        d = sig.get("direction", "neutral")
-        css = f"sig-card sig-{'neg' if d=='negative' else 'pos' if d=='positive' else 'neu'}"
-        st.markdown(
-            f'<div class="{css}">'
-            f'{intensity_badge(sig.get("intensity","low"))} {direction_icon(d)} '
-            f'<strong>{sig.get("fact","")}</strong><br>'
-            f'<small style="color:#666">{sig.get("source","")} — {sig.get("explanation","")}</small>'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
+    """
+    Mostra i segnali organizzati per area, ordinati per intensità.
+    Layout leggibile: ogni segnale ha il fatto in primo piano e la spiegazione
+    come dettaglio secondario.
+    """
+    # Filtra solo segnali delle aree selezionate, esclude segnali interni _AGENT
+    visible = [
+        s for s in signals
+        if s.get("area") in area_filter
+        and not s.get("source", "").endswith("_AGENT")
+        and s.get("fact", "").strip()
+    ]
+
+    if not visible:
+        st.info("Nessun segnale disponibile per le aree selezionate.")
+        return
+
+    # Raggruppa per area e mantieni solo le aree selezionate nell'ordine definito
+    by_area: dict[str, list[dict]] = {}
+    for area in area_filter:
+        sigs = [s for s in visible if s.get("area") == area]
+        # Ordina: prima per intensità (high → medium → low), poi per direction (neg first)
+        sigs.sort(key=lambda s: (
+            _INTENSITY_ORDER.get(s.get("intensity", "low"), 2),
+            0 if s.get("direction") == "negative" else 1,
+        ))
+        if sigs:
+            by_area[area] = sigs
+
+    if not by_area:
+        st.info("Nessun segnale disponibile.")
+        return
+
+    # Tabs per area (max 4)
+    area_labels_present = [
+        (area, AREA_LABELS.get(area, area))
+        for area in area_filter
+        if area in by_area
+    ]
+    if not area_labels_present:
+        return
+
+    tab_labels = [f"{label} ({len(by_area[area])})" for area, label in area_labels_present]
+    tabs = st.tabs(tab_labels)
+
+    for tab, (area, label) in zip(tabs, area_labels_present):
+        with tab:
+            area_sigs = by_area[area]
+            n_neg = sum(1 for s in area_sigs if s.get("direction") == "negative")
+            n_pos = sum(1 for s in area_sigs if s.get("direction") == "positive")
+            n_high = sum(1 for s in area_sigs if s.get("intensity") == "high")
+
+            # Sommario area in una riga
+            parts = []
+            if n_high:
+                parts.append(f"🔴 {n_high} alta priorità")
+            if n_neg:
+                parts.append(f"↓ {n_neg} negativi")
+            if n_pos:
+                parts.append(f"↑ {n_pos} positivi")
+            if parts:
+                st.caption(" · ".join(parts))
+
+            # Nota tensioni apparentemente contraddittorie
+            if n_pos > 0 and n_neg > 0:
+                st.info(
+                    "💡 **Tensioni apparentemente contraddittorie:** la presenza di segnali positivi e negativi "
+                    "nella stessa area è spesso economicamente coerente. Esempi comuni: "
+                    "produzione in calo ma scorte in aumento (consumo calato ancora di più); "
+                    "volume esportazioni in salita ma valore in calo (prezzi scesi — i compratori "
+                    "acquistano di più prima di ulteriori riduzioni). "
+                    "Queste tensioni indicano cambi strutturali nel mercato, non errori nei dati."
+                )
+
+            # Segnali come cards leggibili
+            for sig in area_sigs:
+                intensity = sig.get("intensity", "low")
+                direction = sig.get("direction", "neutral")
+                fact = sig.get("fact", "").strip()
+                source = sig.get("source", "").replace("_", " ")
+                explanation = sig.get("explanation", "").strip()
+
+                bg, fg, dot = _INTENSITY_COLOR.get(intensity, _INTENSITY_COLOR["low"])
+                dir_label = _DIRECTION_LABEL.get(direction, "→")
+
+                # Card principale con fatto
+                st.markdown(
+                    f'<div style="background:{bg};border-radius:8px;padding:10px 14px;'
+                    f'margin:4px 0;border-left:4px solid {fg};">'
+                    f'<span style="font-size:0.78rem;color:{fg};font-weight:600;'
+                    f'text-transform:uppercase;letter-spacing:0.04em;">'
+                    f'{dot} {dir_label}</span><br>'
+                    f'<span style="font-size:0.97rem;font-weight:600;color:#1a1a1a;">'
+                    f'{fact}</span>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+                # Dettaglio fonte + spiegazione sotto la card
+                if explanation or source:
+                    detail_parts = []
+                    if source:
+                        detail_parts.append(f"**Fonte:** {source}")
+                    if explanation:
+                        detail_parts.append(explanation)
+                    st.caption("  ·  ".join(detail_parts))
 
 
 def _render_freshness_table(data_freshness: dict) -> None:
@@ -153,13 +252,44 @@ def _render_freshness_table(data_freshness: dict) -> None:
     rows = [
         {
             "Fonte": src,
-            "Cadenza": info.get("cadenza", "?"),
-            "Giorni fa": info.get("days_old", "?"),
+            "Cadenza": info.get("cadenza") or "unknown",
+            "Giorni fa": info["days_old"] if info.get("days_old") is not None else "N/A",
             "Status": "✅ Fresh" if info.get("is_fresh") else "⚠️ Stale",
         }
         for src, info in data_freshness.items()
     ]
     st.dataframe(rows, hide_index=True, use_container_width=True)
+
+
+# ---------------------------------------------------------------------------
+# Chart section renderer
+# ---------------------------------------------------------------------------
+
+def _render_charts_section(
+    charts_metadata: list[dict],
+    country: str = "BR",
+    use_api: bool = False,
+    section_key: str = "report",
+) -> None:
+    """
+    Mostra i grafici interattivi organizzati per area tematica.
+    Usa gli stessi renderer della Dashboard Visiva (MongoDB-first, API fallback, simulated).
+    section_key evita conflitti di ID Streamlit con la Dashboard Visiva.
+    """
+    from dashboard.charts import render_dashboard_tab, DASHBOARD_TABS
+
+    tab_labels = [label for label, _ in DASHBOARD_TABS]
+    tab_keys = [key for _, key in DASHBOARD_TABS]
+    inner_tabs = st.tabs(tab_labels)
+
+    for inner_tab, tab_key in zip(inner_tabs, tab_keys):
+        with inner_tab:
+            render_dashboard_tab(
+                tab_key,
+                country=country,
+                use_api=use_api,
+                key_prefix=f"{section_key}_{tab_key}",
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -297,51 +427,57 @@ def _render_daily_report(result: dict) -> None:
         st.markdown(exec_summary)
 
     st.divider()
-    _render_area_scores(signals)
-    st.divider()
 
-    # Sezioni narrative
-    st.markdown("#### Analisi per Area")
-    for sec in sections:
-        area = sec.get("area", "")
-        label = AREA_LABELS.get(area, area)
-        score = sec.get("score", 0.0)
-        with st.expander(f"{label} — {risk_emoji(score)} {score}/100", expanded=True):
-            st.markdown(sec.get("text", ""))
-            key_sigs = sec.get("signals", [])
-            if key_sigs:
-                for ks in key_sigs:
-                    st.markdown(f"• {ks}")
+    sub_analisi, sub_grafici = st.tabs(["📋 Analisi", "📊 Grafici"])
 
-    # Correlazioni + Outlook
-    col_c, col_o = st.columns(2)
-    with col_c:
-        if correlations:
-            st.markdown("#### Correlazioni")
-            for c in correlations:
-                st.markdown(f"• {c}")
-    with col_o:
-        if outlook:
-            st.markdown("#### Outlook 24-48h")
-            st.info(outlook)
+    with sub_analisi:
+        _render_area_scores(signals)
+        st.divider()
 
-    st.divider()
+        # Sezioni narrative
+        st.markdown("#### Analisi per Area")
+        for sec in sections:
+            area = sec.get("area", "")
+            label = AREA_LABELS.get(area, area)
+            score = sec.get("score", 0.0)
+            with st.expander(f"{label} — {risk_emoji(score)} {score}/100", expanded=True):
+                st.markdown(sec.get("text", ""))
+                key_sigs = sec.get("signals", [])
+                if key_sigs:
+                    for ks in key_sigs:
+                        st.markdown(f"• {ks}")
 
-    with st.expander("Segnali dettaglio", expanded=False):
-        area_sel = st.multiselect(
-            "Filtra area",
-            options=list(AREA_LABELS.keys()),
-            default=list(AREA_LABELS.keys()),
-            format_func=lambda x: AREA_LABELS[x],
-            key="daily_sig_filter",
+        # Correlazioni + Outlook
+        col_c, col_o = st.columns(2)
+        with col_c:
+            if correlations:
+                st.markdown("#### Correlazioni")
+                for c in correlations:
+                    st.markdown(f"• {c}")
+        with col_o:
+            if outlook:
+                st.markdown("#### Outlook 24-48h")
+                st.info(outlook)
+
+        st.divider()
+
+        with st.expander("Segnali dettaglio per area", expanded=False):
+            st.caption("Segnali raccolti dai 4 sub-agenti · ordinati per priorità · tab per area")
+            _render_signals_detail(signals, list(AREA_LABELS.keys()))
+
+        with st.expander("Data Freshness", expanded=False):
+            _render_freshness_table(data_freshness)
+
+        with st.expander("Raw JSON", expanded=False):
+            st.json(report_json)
+
+    with sub_grafici:
+        _render_charts_section(
+            charts_metadata=result.get("charts", []),
+            country=result.get("country", "BR"),
+            use_api=use_api_fallback,
+            section_key="daily",
         )
-        _render_signals_detail(signals, area_sel)
-
-    with st.expander("Data Freshness", expanded=False):
-        _render_freshness_table(data_freshness)
-
-    with st.expander("Raw JSON", expanded=False):
-        st.json(report_json)
 
 
 # ---------------------------------------------------------------------------
@@ -457,36 +593,47 @@ def _render_weekly_report(result: dict) -> None:
     _render_area_scores(signals)
     st.divider()
 
-    # 3 tab per team
-    tab_acq, tab_qual, tab_mgmt = st.tabs(
-        ["Team Acquisti", "Team Quality", "Management"]
-    )
+    sub_analisi_w, sub_grafici_w = st.tabs(["📋 Analisi", "📊 Grafici"])
 
-    with tab_acq:
-        if acquisti := report_json.get("acquisti"):
-            _render_team_section(acquisti, "acquisti")
-        else:
-            st.info("Report Acquisti non disponibile.")
+    with sub_analisi_w:
+        # 3 tab per team
+        tab_acq, tab_qual, tab_mgmt = st.tabs(
+            ["Team Acquisti", "Team Quality", "Management"]
+        )
 
-    with tab_qual:
-        if quality := report_json.get("quality"):
-            _render_team_section(quality, "quality")
-        else:
-            st.info("Report Quality non disponibile.")
+        with tab_acq:
+            if acquisti := report_json.get("acquisti"):
+                _render_team_section(acquisti, "acquisti")
+            else:
+                st.info("Report Acquisti non disponibile.")
 
-    with tab_mgmt:
-        if mgmt := report_json.get("management"):
-            _render_team_section(mgmt, "management")
-        else:
-            st.info("Report Management non disponibile.")
+        with tab_qual:
+            if quality := report_json.get("quality"):
+                _render_team_section(quality, "quality")
+            else:
+                st.info("Report Quality non disponibile.")
 
-    st.divider()
+        with tab_mgmt:
+            if mgmt := report_json.get("management"):
+                _render_team_section(mgmt, "management")
+            else:
+                st.info("Report Management non disponibile.")
 
-    with st.expander("Data Freshness", expanded=False):
-        _render_freshness_table(data_freshness)
+        st.divider()
 
-    with st.expander("Raw JSON", expanded=False):
-        st.json(report_json)
+        with st.expander("Data Freshness", expanded=False):
+            _render_freshness_table(data_freshness)
+
+        with st.expander("Raw JSON", expanded=False):
+            st.json(report_json)
+
+    with sub_grafici_w:
+        _render_charts_section(
+            charts_metadata=result.get("charts", []),
+            country=result.get("country", "BR"),
+            use_api=use_api_fallback,
+            section_key="weekly",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -543,131 +690,159 @@ def _get_embedding(text: str) -> list[float] | None:
         return None
 
 
+def _format_doc_snippet(doc: dict, max_summary: int = 350) -> str:
+    """
+    Converte un documento MongoDB in un testo leggibile da Claude.
+    Schema-agnostico: funziona con qualsiasi sorgente presente o futura.
+    Estrae: source, collected_at, summary_en, signals, movement_label
+    + tutti i campi numerici scalari rilevanti (esclude array grandi e ObjectId).
+    """
+    src = doc.get("source", "?")
+    collected = str(doc.get("collected_at", ""))[:10]
+    lines = [f"[{src}] — {collected}"]
+
+    # Summary testuale
+    if summary := (doc.get("summary_en") or doc.get("summary") or ""):
+        lines.append(summary[:max_summary])
+
+    # Etichetta movimento (es. "supply_tightening", "bullish", ...)
+    if ml := doc.get("movement_label"):
+        lines.append(f"Trend: {ml}")
+
+    # Segnali (lista di stringhe o lista di dict)
+    raw_sigs = doc.get("signals", [])
+    if raw_sigs:
+        sig_texts = []
+        for s in raw_sigs[:6]:
+            if isinstance(s, str):
+                sig_texts.append(s)
+            elif isinstance(s, dict):
+                fact = s.get("fact") or s.get("text") or s.get("signal") or ""
+                if fact:
+                    sig_texts.append(fact)
+        if sig_texts:
+            lines.append("Segnali: " + " · ".join(sig_texts))
+
+    # Campi numerici scalari rilevanti (top 8 per valore informativo)
+    _SKIP = {
+        "_id", "source", "country", "macroarea", "collected_at", "collected_period",
+        "summary_en", "summary", "movement_label", "signals", "embed_text",
+        "pdf_excerpt", "report_text_excerpt", "source_url", "index_url",
+        "pdf_url", "table_url", "source_format", "source_descriptor_url",
+        "_chart_fields", "rule_based_signals", "fallback_summary_en",
+        "rule_based_movement_label",
+    }
+    numeric_lines = []
+    for k, v in doc.items():
+        if k in _SKIP:
+            continue
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            numeric_lines.append(f"{k}: {v}")
+        elif isinstance(v, str) and len(v) < 120 and k not in _SKIP:
+            numeric_lines.append(f"{k}: {v}")
+        elif isinstance(v, dict) and len(v) <= 8:
+            # dizionari piccoli (es. latest_month, national_snapshot)
+            inner = ", ".join(
+                f"{ik}={iv}" for ik, iv in v.items()
+                if isinstance(iv, (int, float, str)) and not isinstance(iv, bool)
+            )
+            if inner:
+                numeric_lines.append(f"{k}: {{{inner}}}")
+    if numeric_lines:
+        lines.append("\n".join(numeric_lines[:12]))
+
+    return "\n".join(lines)
+
+
 def _build_chat_context(question: str) -> tuple[str, dict]:
     """
-    Costruisce il contesto RAG per il chatbot.
-    Ritorna (context_text, debug_info) dove debug_info descrive cosa è stato trovato.
+    Costruisce il contesto per il chatbot combinando:
+    1. Ultimo agent_run (report + score)
+    2. Ricerca semantica Qdrant (se OpenAI disponibile)
+    3. Documento più recente per OGNI sorgente in MongoDB — schema-agnostico,
+       include automaticamente qualsiasi nuova fonte aggiunta via n8n.
     """
     from utils.db import get_db
     from utils.qdrant import collection_exists, search
 
     parts: list[str] = []
-    debug: dict = {
-        "agent_run": None,
-        "qdrant": {},
-        "mongodb": {},
-    }
+    debug: dict = {"agent_run": None, "qdrant": {}, "mongodb": {}}
 
-    # --- Ultimo run agente ---
     db = get_db()
+
+    # ── 1. Ultimo agent run ────────────────────────────────────────────────
     last_run = db["agent_runs"].find_one({}, sort=[("saved_at", -1)])
     if last_run:
         rj = last_run.get("report_json", {})
-        run_date = last_run.get('run_at', '')[:10]
-        score = last_run.get('final_score', 0)
+        run_date = last_run.get("run_at", "")[:10]
+        score = last_run.get("final_score", 0)
+        alerts = last_run.get("alerts", [])
+        sections = rj.get("sections", [])
+        sec_text = "\n".join(
+            f"  {s.get('area','')}: {s.get('score',0)}/100 — {s.get('text','')[:200]}"
+            for s in sections
+        )
         parts.append(
-            f"=== ULTIMO REPORT ({run_date}) ===\n"
+            f"=== ULTIMO REPORT AGENTE ({run_date}, tipo={last_run.get('report_type','?')}) ===\n"
             f"Risk Score: {score:.1f}/100\n"
             f"Headline: {rj.get('headline', '')}\n"
-            f"Executive Summary: {rj.get('executive_summary', rj.get('management', {}).get('executive_summary', ''))}\n"
-            f"Alerts: {', '.join(last_run.get('alerts', [])) or 'nessuno'}"
+            f"Executive Summary: {rj.get('executive_summary', rj.get('management', {}).get('executive_summary', ''))[:400]}\n"
+            f"Alert: {', '.join(alerts) or 'nessuno'}\n"
+            f"Aree:\n{sec_text}"
         )
-        debug["agent_run"] = {
-            "date": run_date,
-            "score": score,
-            "type": last_run.get("report_type", "?"),
-        }
+        debug["agent_run"] = {"date": run_date, "score": score, "type": last_run.get("report_type", "?")}
 
-    # --- Ricerca Qdrant ---
+    # ── 2. Ricerca semantica Qdrant ────────────────────────────────────────
     embedding = _get_embedding(question)
     if embedding:
-        for collection in ["geo_texts", "crops_texts", "reports_archive"]:
-            if not collection_exists(collection):
-                debug["qdrant"][collection] = "collection non trovata"
+        for coll in ["geo_texts", "crops_texts", "reports_archive"]:
+            if not collection_exists(coll):
+                debug["qdrant"][coll] = "non trovata"
                 continue
-            hits = search(collection=collection, query_vector=embedding, limit=3)
-            debug["qdrant"][collection] = f"{len(hits)} hit"
-            if hits:
-                texts = []
-                for h in hits:
-                    t = (
-                        h.get("text") or h.get("content") or
-                        h.get("summary_en") or h.get("embed_text") or
-                        h.get("executive_summary") or ""
-                    )
-                    if t:
-                        texts.append(t[:400])
-                if texts:
-                    parts.append(
-                        f"=== DOCUMENTI RILEVANTI ({collection}) ===\n"
-                        + "\n---\n".join(texts)
-                    )
+            hits = search(collection=coll, query_vector=embedding, limit=3)
+            debug["qdrant"][coll] = f"{len(hits)} hit"
+            texts = [
+                (h.get("text") or h.get("content") or h.get("summary_en")
+                 or h.get("embed_text") or h.get("executive_summary") or "")[:400]
+                for h in hits
+            ]
+            texts = [t for t in texts if t]
+            if texts:
+                parts.append(f"=== QDRANT {coll.upper()} ===\n" + "\n---\n".join(texts))
     else:
-        debug["qdrant"]["_embedding"] = "errore generazione embedding"
+        debug["qdrant"]["_embedding"] = "errore"
 
-    # --- Dati raw recenti MongoDB ---
-    for col_name, macroarea in [
-        ("raw_prices", "prices"),
-        ("raw_crops", "crops"),
-        ("raw_environment", "environment"),
-    ]:
-        docs = list(db[col_name].find(
-            {"macroarea": macroarea, "country": "BR"},
-            {"source": 1, "summary_en": 1, "movement_label": 1,
-             "collected_at": 1, "signals": 1,
-             "total_detections": 1, "coffee_zone_detections": 1,
-             "coffee_zone_ratio": 1, "affected_municipalities": 1},
-            sort=[("collected_at", -1)],
-            limit=2,
-        ))
-        debug["mongodb"][col_name] = f"{len(docs)} doc"
-        snippets = []
-        for doc in docs:
-            src = doc.get("source", "?")
-            lines = []
-            if summary := doc.get("summary_en"):
-                lines.append(summary[:300])
-            if doc.get("total_detections") is not None:
-                cz = doc.get("coffee_zone_detections", 0)
-                ratio = doc.get("coffee_zone_ratio", 0)
-                munis = doc.get("affected_municipalities", [])
-                lines.append(
-                    f"Fuochi totali: {doc['total_detections']} | "
-                    f"In coffee zones: {cz} ({ratio:.0%}) | "
-                    f"Comuni: {', '.join(munis[:5]) if munis else 'n/d'}"
+    # ── 3. MongoDB — un doc per sorgente, tutte le collection raw_* ────────
+    # Schema-agnostico: legge le sorgenti distinte dalla collection,
+    # recupera l'ultimo documento per ognuna, la formatta genericamente.
+    # Qualsiasi nuova sorgente inserita via n8n viene inclusa automaticamente.
+    RAW_COLLECTIONS = ["raw_geo", "raw_prices", "raw_crops", "raw_environment"]
+
+    for col_name in RAW_COLLECTIONS:
+        try:
+            # Trova tutte le sorgenti distinte per il Brasile
+            sources = db[col_name].distinct("source", {"country": "BR"})
+        except Exception:
+            sources = []
+
+        col_snippets = []
+        for src in sorted(sources):
+            try:
+                doc = db[col_name].find_one(
+                    {"source": src, "country": "BR"},
+                    sort=[("collected_at", -1)],
                 )
-            if lines:
-                snippets.append(f"{src}: " + " — ".join(lines))
-        if snippets:
-            parts.append(f"=== RAW DATA {macroarea.upper()} ===\n" + "\n".join(snippets))
+                if doc:
+                    col_snippets.append(_format_doc_snippet(doc))
+            except Exception:
+                pass
 
-    # --- GDELT + WTO: articoli geo recenti da raw_geo ---
-    geo_docs = list(db["raw_geo"].find(
-        {"country": "BR"},
-        {"source": 1, "title": 1, "summary_en": 1, "signals": 1,
-         "sentiment": 1, "topic": 1, "collected_at": 1},
-        sort=[("collected_at", -1)],
-        limit=6,
-    ))
-    debug["mongodb"]["raw_geo"] = f"{len(geo_docs)} doc"
-    geo_snippets = []
-    for doc in geo_docs:
-        src = doc.get("source", "?")
-        title = doc.get("title") or ""
-        summary = doc.get("summary_en") or ""
-        topic = doc.get("topic") or ""
-        sentiment = doc.get("sentiment") or ""
-        sigs = doc.get("signals", [])
-        line = f"[{src}] {title}"
-        if summary:
-            line += f" — {summary[:200]}"
-        if sigs:
-            line += f" | Segnali: {'; '.join(str(s) for s in sigs[:3])}"
-        if topic or sentiment:
-            line += f" ({topic}, {sentiment})"
-        geo_snippets.append(line)
-    if geo_snippets:
-        parts.append("=== NEWS GEO (GDELT/WTO) — raw_geo ===\n" + "\n".join(geo_snippets))
+        debug["mongodb"][col_name] = f"{len(col_snippets)} sorgenti"
+        if col_snippets:
+            parts.append(
+                f"=== {col_name.upper().replace('_', ' ')} ===\n"
+                + "\n\n".join(col_snippets)
+            )
 
     context = "\n\n".join(parts) if parts else "Nessun dato di contesto disponibile."
     debug["total_chars"] = len(context)
@@ -679,18 +854,19 @@ def _stream_chat_response(question: str, context: str, history: list[dict]):
     """Generator che streamma la risposta di Claude Sonnet."""
     system = """\
 Sei l'esperto globale delle origini del caffè di Lavazza.
-Hai accesso ai dati di intelligence più recenti sul Brasile provenienti da 13 fonti dati:
-GDELT (news geopolitiche orarie), WTO News, Port Congestion (AIS), CONAB PDF (previsioni raccolto),
-USDA FAS, IBGE SIDRA, Comex Stat, FAOSTAT (colture), World Bank Pink Sheet, BCB PTAX, ECB (prezzi/FX),
-NASA FIRMS (incendi — arricchiti con coffee regions a livello municipale), NOAA ENSO (clima).
+Hai accesso in tempo reale a tutti i dati di intelligence sul Brasile: il contesto che ricevi
+contiene l'ultimo documento per ogni sorgente attiva nel sistema (raw_geo, raw_prices,
+raw_crops, raw_environment). Le sorgenti possono includere: GDELT, WTO News, Port Congestion,
+CONAB, USDA FAS, IBGE SIDRA, Comex Stat, FAOSTAT, World Bank Pink Sheet, BCB PTAX, ECB,
+NASA FIRMS, NOAA ENSO — e qualsiasi nuova sorgente aggiunta in futuro.
 
-Per i fuochi NASA FIRMS: il sistema arricchisce ogni rilevamento con i confini GeoJSON dei comuni
-produttori di caffè (MongoDB coffee_regions, 2 livelli: stati L1 e comuni L2). I campi
-coffee_zone_detections e coffee_zone_ratio indicano quanti fuochi cadono nei comuni produttori.
-
-Rispondi in italiano, cita sempre numeri specifici quando disponibili.
-Sii conciso (max 200 parole) a meno che l'utente non chieda approfondimenti.
-Se la domanda è fuori dal dominio caffè/Brasile/supply chain, reindirizza educatamente.
+Regole:
+- Rispondi SEMPRE in italiano.
+- Cita numeri specifici e la fonte (es. "BCB PTAX: 5.42 BRL/USD al 2026-04-10").
+- Usa i dati del contesto — non inventare cifre.
+- Sii conciso (max 200 parole) a meno che l'utente chieda un approfondimento.
+- Se una domanda riguarda una fonte non presente nel contesto, dillo esplicitamente.
+- Se la domanda è fuori dal dominio caffè/Brasile/supply chain, reindirizza educatamente.
 """
     messages = []
     for msg in history[-6:]:  # ultimi 6 messaggi per contesto
@@ -728,6 +904,14 @@ with st.sidebar:
     rag_debug = st.toggle("Mostra RAG context", value=False,
                           help="Mostra le sorgenti e il contesto recuperato per ogni risposta del chatbot")
     st.divider()
+    chart_source = st.radio(
+        "Sorgente dati grafici",
+        options=["MongoDB", "API Diretta"],
+        index=0,
+        help="MongoDB: usa i dati già raccolti da n8n (veloce, offline). API Diretta: richiama le fonti esterne in tempo reale.",
+    )
+    use_api_fallback = (chart_source == "API Diretta")
+    st.divider()
     st.caption("Servizi attivi:")
     st.caption("• MongoDB localhost:27017")
     st.caption("• Qdrant localhost:6333")
@@ -759,10 +943,11 @@ if "rag_debug_history" not in st.session_state:
 # ---------------------------------------------------------------------------
 # Tabs principali
 # ---------------------------------------------------------------------------
-tab_daily, tab_weekly, tab_chat = st.tabs([
+tab_daily, tab_weekly, tab_chat, tab_dashboard = st.tabs([
     "Daily Report",
     "Weekly Reports",
     "Chat",
+    "Dashboard Visiva",
 ])
 
 # ============================================================================
@@ -932,3 +1117,29 @@ with tab_chat:
             ]
             for ex in examples:
                 st.code(ex, language=None)
+
+# ============================================================================
+# TAB 4 — DASHBOARD VISIVA
+# ============================================================================
+with tab_dashboard:
+    from dashboard.charts import render_dashboard_tab, DASHBOARD_TABS
+
+    st.markdown("## Dashboard Visiva — Brasile")
+    st.markdown(
+        "Visualizzazioni interattive dai dati più recenti. "
+        "Disponibile sempre, indipendentemente dall'esecuzione del grafo LangGraph."
+    )
+    st.caption(
+        "Sorgente: " + ("**API Diretta**" if use_api_fallback else "**MongoDB** (dati n8n)")
+        + " · Modifica il toggle nella sidebar per cambiare sorgente."
+    )
+    st.divider()
+
+    dash_tab_labels = [label for label, _ in DASHBOARD_TABS]
+    dash_tab_keys   = [key   for _, key   in DASHBOARD_TABS]
+    dash_tab_widgets = st.tabs(dash_tab_labels)
+
+    for dash_tab_widget, tab_key in zip(dash_tab_widgets, dash_tab_keys):
+        with dash_tab_widget:
+            render_dashboard_tab(tab_key, country="BR", use_api=use_api_fallback,
+                                 key_prefix=f"dash_{tab_key}")

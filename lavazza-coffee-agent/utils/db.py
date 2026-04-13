@@ -73,6 +73,27 @@ def save_agent_run(run_doc: dict) -> str:
     return str(result.inserted_id)
 
 
+def get_chart_series(
+    collection: str,
+    source: str,
+    country: str = "BR",
+) -> tuple[dict | None, list]:
+    """
+    Convenience wrapper per i chart builders.
+    Ritorna (doc, series_list) dove series_list è estratta da _chart_fields.
+    Ritorna (None, []) se il documento non viene trovato.
+    """
+    doc = get_latest_doc(collection, source, country)
+    if doc is None:
+        return None, []
+    chart_fields = doc.get("_chart_fields", [])
+    for field in chart_fields:
+        val = doc.get(field)
+        if isinstance(val, list) and val:
+            return doc, val
+    return doc, []
+
+
 def get_chart_field_map(source: str, field_name: str) -> dict | None:
     """Controlla se Haiku ha già 'imparato' cosa significa un campo (cache)."""
     col: Collection = get_db()["chart_field_map"]

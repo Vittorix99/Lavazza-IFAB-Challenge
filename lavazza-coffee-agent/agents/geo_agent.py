@@ -206,21 +206,21 @@ def geo_agent(state: AgentState) -> dict:
         mongo_docs = raw_geo_docs
         # freschezza basata sul documento più recente
         try:
-            dt = datetime.fromisoformat(
-                str(raw_geo_docs[0].get("collected_at", "")).replace("Z", "+00:00")
-            )
+            raw_ts = str(raw_geo_docs[0].get("collected_at", "")).strip()
+            raw_ts = re.sub(r"\.\d+", "", raw_ts).replace("Z", "+00:00")
+            dt = datetime.fromisoformat(raw_ts)
             days_old = (datetime.now(timezone.utc) - dt).days
         except Exception:
-            days_old = 999
+            days_old = None
 
         freshness_updates["GDELT"] = {
             "days_old": days_old,
-            "is_fresh": demo_mode or days_old <= 1,
+            "is_fresh": demo_mode or (days_old is not None and days_old <= 1),
             "cadenza": "hourly",
         }
         freshness_updates["WTO_RSS"] = {
             "days_old": days_old,
-            "is_fresh": demo_mode or days_old <= 1,
+            "is_fresh": demo_mode or (days_old is not None and days_old <= 1),
             "cadenza": "6h",
         }
 

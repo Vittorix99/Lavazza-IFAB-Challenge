@@ -19,22 +19,37 @@ from utils.llm_analyzer import analyze_with_haiku
 from utils.split_doc import split_doc
 
 
+import re as _re
+
+# Fallback cadenze per fonti che non memorizzano 'cadenza' nel documento raw
+_SOURCE_CADENCE = {
+    "BCB_PTAX": "daily",
+    "ECB_DATA_PORTAL": "daily",
+    "WB_PINK_SHEET": "monthly",
+    "WORLD_BANK_PINKSHEET": "monthly",
+}
+
+
 def _compute_freshness(doc: dict, demo_mode: bool) -> dict:
-    cadence = str(doc.get("cadenza", "unknown")).lower()
+    cadence = str(doc.get("cadenza", "")).strip().lower()
+    if not cadence or cadence == "unknown":
+        source = str(doc.get("source", "")).upper()
+        cadence = _SOURCE_CADENCE.get(source, "unknown")
+
     thresholds = {"hourly": 1, "daily": 2, "weekly": 10, "monthly": 35, "unknown": 30}
     threshold = thresholds.get(cadence, 30)
 
     try:
-        dt = datetime.fromisoformat(
-            str(doc.get("collected_at", "")).replace("Z", "+00:00")
-        )
+        raw_ts = str(doc.get("collected_at", "")).strip()
+        raw_ts = _re.sub(r"\.\d+", "", raw_ts).replace("Z", "+00:00")
+        dt = datetime.fromisoformat(raw_ts)
         days_old = (datetime.now(timezone.utc) - dt).days
     except Exception:
-        days_old = 999
+        days_old = None
 
     return {
         "days_old": days_old,
-        "is_fresh": demo_mode or (days_old <= threshold),
+        "is_fresh": demo_mode or (days_old is not None and days_old <= threshold),
         "cadenza": cadence,
     }
 

@@ -6,8 +6,8 @@
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
-        -2000,
-        -1780
+        0,
+        0
       ],
       "id": "manual-trigger-bcb",
       "name": "Manual Trigger"
@@ -26,15 +26,15 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        -2000,
-        -1660
+        0,
+        200
       ],
       "id": "schedule-trigger-bcb",
       "name": "Schedule Trigger"
     },
     {
       "parameters": {
-        "url": "={{ (() => { const lookbackDays = 180; const end = new Date(); const start = new Date(end); start.setDate(start.getDate() - lookbackDays); const fmt = (d) => `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}-${d.getFullYear()}`; const startEncoded = encodeURIComponent(`'${fmt(start)}'`); const endEncoded = encodeURIComponent(`'${fmt(end)}'`); return `https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoDolarPeriodo(dataInicial=@dataInicial,dataFinalCotacao=@dataFinalCotacao)?@dataInicial=${startEncoded}&@dataFinalCotacao=${endEncoded}&$top=100&$format=json&$select=cotacaoCompra,cotacaoVenda,dataHoraCotacao`; })() }}",
+        "url": "={{ (() => { const lookbackDays = 3650; const end = new Date(); const start = new Date(end); start.setDate(start.getDate() - lookbackDays); const fmt = (d) => `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}-${d.getFullYear()}`; const startEncoded = encodeURIComponent(`'${fmt(start)}'`); const endEncoded = encodeURIComponent(`'${fmt(end)}'`); return `https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoDolarPeriodo(dataInicial=@dataInicial,dataFinalCotacao=@dataFinalCotacao)?@dataInicial=${startEncoded}&@dataFinalCotacao=${endEncoded}&$top=5000&$format=json&$select=cotacaoCompra,cotacaoVenda,dataHoraCotacao`; })() }}",
         "options": {
           "timeout": 60000
         },
@@ -55,8 +55,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -1600,
-        -1720
+        260,
+        0
       ],
       "id": "bcb-ptax-download-node",
       "name": "BCB PTAX Download",
@@ -65,13 +65,13 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "function getCollectedPeriod(isoTs, cadenza) {\n  const d = new Date(isoTs || new Date().toISOString());\n  const pad = n => String(n).padStart(2, '0');\n  const yyyy = d.getUTCFullYear();\n  const mm = pad(d.getUTCMonth() + 1);\n  const dd = pad(d.getUTCDate());\n  const hh = pad(d.getUTCHours());\n  const doy = Math.floor((d - new Date(Date.UTC(yyyy,0,1))) / 86400000);\n  const week = pad(Math.ceil((doy + new Date(Date.UTC(yyyy,0,1)).getUTCDay() + 1) / 7));\n  switch((cadenza||'').toLowerCase()) {\n    case 'hourly':  return `${yyyy}-${mm}-${dd}T${hh}`;\n    case 'daily':   return `${yyyy}-${mm}-${dd}`;\n    case 'weekly':  return `${yyyy}-W${week}`;\n    case 'monthly': return `${yyyy}-${mm}`;\n    default:        return `${yyyy}-${mm}-${dd}`;\n  }\n}\nconst now = new Date().toISOString();\nconst _collectedPeriod = getCollectedPeriod(now, 'daily');\nconst expectedFreshnessHours = 36;\nconst isFresh = (new Date() - new Date(now)) / 3600000 < expectedFreshnessHours;\n\nconst lookbackDays = 180;\nconst end = new Date();\nconst start = new Date(end);\nstart.setDate(start.getDate() - lookbackDays);\n\nfunction formatIsoDate(date) {\n  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;\n}\n\nfunction toNumber(value, decimals = 4) {\n  if (value === null || value === undefined || value === '') return null;\n  const numeric = Number(value);\n  if (Number.isNaN(numeric)) return null;\n  return Number(numeric.toFixed(decimals));\n}\n\nconst responseRows = Array.isArray($json.value) ? $json.value : [];\nconst rows = responseRows\n  .map((row) => {\n    const dataHoraCotacao = String(row.dataHoraCotacao || '').trim();\n    const cotacaoCompra = toNumber(row.cotacaoCompra, 4);\n    const cotacaoVenda = toNumber(row.cotacaoVenda, 4);\n\n    return {\n      dataHoraCotacao,\n      quote_date: dataHoraCotacao ? dataHoraCotacao.slice(0, 10) : null,\n      cotacaoCompra,\n      cotacaoVenda,\n      spread: cotacaoCompra !== null && cotacaoVenda !== null ? Number((cotacaoVenda - cotacaoCompra).toFixed(4)) : null\n    };\n  })\n  .filter((row) => row.dataHoraCotacao && row.cotacaoCompra !== null && row.cotacaoVenda !== null)\n  .sort((a, b) => a.dataHoraCotacao.localeCompare(b.dataHoraCotacao));\n\nif (!rows.length) {\n  throw new Error('BCB PTAX returned no valid quotes in the selected period');\n}\n\nconst latest = rows[rows.length - 1];\nconst previous = rows.length > 1 ? rows[rows.length - 2] : null;\nconst recentSeries = rows.slice(-10);\nconst sellValues = rows.map((row) => row.cotacaoVenda).filter((value) => typeof value === 'number');\nconst minSell = sellValues.length ? Number(Math.min(...sellValues).toFixed(4)) : null;\nconst maxSell = sellValues.length ? Number(Math.max(...sellValues).toFixed(4)) : null;\nconst avgSell = sellValues.length ? Number((sellValues.reduce((sum, value) => sum + value, 0) / sellValues.length).toFixed(4)) : null;\nconst rangeSell = minSell !== null && maxSell !== null ? Number((maxSell - minSell).toFixed(4)) : null;\n\nconst changeVsPrevious = previous ? Number((latest.cotacaoVenda - previous.cotacaoVenda).toFixed(4)) : null;\nconst changePctVsPrevious = previous && previous.cotacaoVenda ? Number((((latest.cotacaoVenda - previous.cotacaoVenda) / previous.cotacaoVenda) * 100).toFixed(4)) : null;\n\nlet movementLabel = 'stable';\nlet summaryEn = `Latest BCB PTAX USD/BRL fixing on ${latest.quote_date} was ${latest.cotacaoVenda.toFixed(4)} BRL sell and ${latest.cotacaoCompra.toFixed(4)} BRL buy.`;\nconst signals = [\n  `Latest PTAX sell ${latest.cotacaoVenda.toFixed(4)} BRL/USD`,\n  `Latest PTAX buy ${latest.cotacaoCompra.toFixed(4)} BRL/USD`,\n  `10-day sell range ${rangeSell !== null ? rangeSell.toFixed(4) : 'n/a'} BRL`\n];\n\nif (changeVsPrevious !== null) {\n  if (changeVsPrevious > 0) movementLabel = 'brl_weaker';\n  else if (changeVsPrevious < 0) movementLabel = 'brl_stronger';\n\n  summaryEn += ` Versus the previous fixing, the PTAX sell rate changed by ${changeVsPrevious.toFixed(4)} BRL (${changePctVsPrevious.toFixed(4)}%).`;\n  if (movementLabel === 'brl_weaker') {\n    summaryEn += ' This indicates BRL weakening against the USD versus the previous fixing.';\n    signals.push('BRL weakened versus previous PTAX fixing');\n  } else if (movementLabel === 'brl_stronger') {\n    summaryEn += ' This indicates BRL strengthening against the USD versus the previous fixing.';\n    signals.push('BRL strengthened versus previous PTAX fixing');\n  } else {\n    signals.push('PTAX unchanged versus previous fixing');\n  }\n}\n\nreturn [{\n  json: {\n    source: 'BCB_PTAX',\n    source_format: 'odata_json',\n    source_url_template: 'https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoDolarPeriodo(...)',\n    source_url: 'https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoDolarPeriodo(...)',\n    country: 'BR',\n    macroarea: 'prices',\n    collected_at: now,\n    collected_period: _collectedPeriod,\n        is_fresh: isFresh,\n    lookback_days: lookbackDays,\n    query_start_date: formatIsoDate(start),\n    query_end_date: formatIsoDate(end),\n    total_quotes: rows.length,\n    quote_date: latest.quote_date,\n    dataHoraCotacao: latest.dataHoraCotacao,\n    cotacaoCompra: latest.cotacaoCompra,\n    cotacaoVenda: latest.cotacaoVenda,\n    spread: latest.spread,\n    movement_label: movementLabel,\n    previous_quote_date: previous ? previous.quote_date : null,\n    previous_dataHoraCotacao: previous ? previous.dataHoraCotacao : null,\n    previous_cotacaoCompra: previous ? previous.cotacaoCompra : null,\n    previous_cotacaoVenda: previous ? previous.cotacaoVenda : null,\n    change_vs_previous: changeVsPrevious,\n    change_pct_vs_previous: changePctVsPrevious,\n    sell_stats_lookback: {\n      min: minSell,\n      avg: avgSell,\n      max: maxSell,\n      range: rangeSell\n    },\n    recent_series: recentSeries,\n    summary_en: summaryEn,\n    signals,\n    _chart_fields: [\"recent_series\"]\n  }\n}];"
+        "jsCode": "function getCollectedPeriod(isoTs, cadenza) {\n  const d = new Date(isoTs || new Date().toISOString());\n  const pad = n => String(n).padStart(2, '0');\n  const yyyy = d.getUTCFullYear();\n  const mm = pad(d.getUTCMonth() + 1);\n  const dd = pad(d.getUTCDate());\n  const hh = pad(d.getUTCHours());\n  const doy = Math.floor((d - new Date(Date.UTC(yyyy,0,1))) / 86400000);\n  const week = pad(Math.ceil((doy + new Date(Date.UTC(yyyy,0,1)).getUTCDay() + 1) / 7));\n  switch((cadenza||'').toLowerCase()) {\n    case 'hourly':  return `${yyyy}-${mm}-${dd}T${hh}`;\n    case 'daily':   return `${yyyy}-${mm}-${dd}`;\n    case 'weekly':  return `${yyyy}-W${week}`;\n    case 'monthly': return `${yyyy}-${mm}`;\n    default:        return `${yyyy}-${mm}-${dd}`;\n  }\n}\nconst now = new Date().toISOString();\nconst _collectedPeriod = getCollectedPeriod(now, 'daily');\nconst expectedFreshnessHours = 36;\nconst isFresh = (new Date() - new Date(now)) / 3600000 < expectedFreshnessHours;\n\nconst lookbackDays = 3650;\nconst end = new Date();\nconst start = new Date(end);\nstart.setDate(start.getDate() - lookbackDays);\n\nfunction formatIsoDate(date) {\n  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;\n}\n\nfunction toNumber(value, decimals = 4) {\n  if (value === null || value === undefined || value === '') return null;\n  const numeric = Number(value);\n  if (Number.isNaN(numeric)) return null;\n  return Number(numeric.toFixed(decimals));\n}\n\nconst responseRows = Array.isArray($json.value) ? $json.value : [];\nconst rows = responseRows\n  .map((row) => {\n    const dataHoraCotacao = String(row.dataHoraCotacao || '').trim();\n    const cotacaoCompra = toNumber(row.cotacaoCompra, 4);\n    const cotacaoVenda = toNumber(row.cotacaoVenda, 4);\n\n    return {\n      dataHoraCotacao,\n      quote_date: dataHoraCotacao ? dataHoraCotacao.slice(0, 10) : null,\n      cotacaoCompra,\n      cotacaoVenda,\n      spread: cotacaoCompra !== null && cotacaoVenda !== null ? Number((cotacaoVenda - cotacaoCompra).toFixed(4)) : null\n    };\n  })\n  .filter((row) => row.dataHoraCotacao && row.cotacaoCompra !== null && row.cotacaoVenda !== null)\n  .sort((a, b) => a.dataHoraCotacao.localeCompare(b.dataHoraCotacao));\n\nif (!rows.length) {\n  throw new Error('BCB PTAX returned no valid quotes in the selected period');\n}\n\nconst latest = rows[rows.length - 1];\nconst previous = rows.length > 1 ? rows[rows.length - 2] : null;\nconst recentSeries = rows;\nconst sellValues = rows.map((row) => row.cotacaoVenda).filter((value) => typeof value === 'number');\nconst minSell = sellValues.length ? Number(Math.min(...sellValues).toFixed(4)) : null;\nconst maxSell = sellValues.length ? Number(Math.max(...sellValues).toFixed(4)) : null;\nconst avgSell = sellValues.length ? Number((sellValues.reduce((sum, value) => sum + value, 0) / sellValues.length).toFixed(4)) : null;\nconst rangeSell = minSell !== null && maxSell !== null ? Number((maxSell - minSell).toFixed(4)) : null;\n\nconst changeVsPrevious = previous ? Number((latest.cotacaoVenda - previous.cotacaoVenda).toFixed(4)) : null;\nconst changePctVsPrevious = previous && previous.cotacaoVenda ? Number((((latest.cotacaoVenda - previous.cotacaoVenda) / previous.cotacaoVenda) * 100).toFixed(4)) : null;\n\nlet movementLabel = 'stable';\nlet summaryEn = `Latest BCB PTAX USD/BRL fixing on ${latest.quote_date} was ${latest.cotacaoVenda.toFixed(4)} BRL sell and ${latest.cotacaoCompra.toFixed(4)} BRL buy.`;\nconst signals = [\n  `Latest PTAX sell ${latest.cotacaoVenda.toFixed(4)} BRL/USD`,\n  `Latest PTAX buy ${latest.cotacaoCompra.toFixed(4)} BRL/USD`,\n  `10-day sell range ${rangeSell !== null ? rangeSell.toFixed(4) : 'n/a'} BRL`\n];\n\nif (changeVsPrevious !== null) {\n  if (changeVsPrevious > 0) movementLabel = 'brl_weaker';\n  else if (changeVsPrevious < 0) movementLabel = 'brl_stronger';\n\n  summaryEn += ` Versus the previous fixing, the PTAX sell rate changed by ${changeVsPrevious.toFixed(4)} BRL (${changePctVsPrevious.toFixed(4)}%).`;\n  if (movementLabel === 'brl_weaker') {\n    summaryEn += ' This indicates BRL weakening against the USD versus the previous fixing.';\n    signals.push('BRL weakened versus previous PTAX fixing');\n  } else if (movementLabel === 'brl_stronger') {\n    summaryEn += ' This indicates BRL strengthening against the USD versus the previous fixing.';\n    signals.push('BRL strengthened versus previous PTAX fixing');\n  } else {\n    signals.push('PTAX unchanged versus previous fixing');\n  }\n}\n\nreturn [{\n  json: {\n    source: 'BCB_PTAX',\n    source_format: 'odata_json',\n    source_url_template: 'https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoDolarPeriodo(...)',\n    source_url: 'https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata/CotacaoDolarPeriodo(...)',\n    country: 'BR',\n    macroarea: 'prices',\n    collected_at: now,\n    collected_period: _collectedPeriod,\n        is_fresh: isFresh,\n    lookback_days: lookbackDays,\n    query_start_date: formatIsoDate(start),\n    query_end_date: formatIsoDate(end),\n    total_quotes: rows.length,\n    quote_date: latest.quote_date,\n    dataHoraCotacao: latest.dataHoraCotacao,\n    cotacaoCompra: latest.cotacaoCompra,\n    cotacaoVenda: latest.cotacaoVenda,\n    spread: latest.spread,\n    movement_label: movementLabel,\n    previous_quote_date: previous ? previous.quote_date : null,\n    previous_dataHoraCotacao: previous ? previous.dataHoraCotacao : null,\n    previous_cotacaoCompra: previous ? previous.cotacaoCompra : null,\n    previous_cotacaoVenda: previous ? previous.cotacaoVenda : null,\n    change_vs_previous: changeVsPrevious,\n    change_pct_vs_previous: changePctVsPrevious,\n    sell_stats_lookback: {\n      min: minSell,\n      avg: avgSell,\n      max: maxSell,\n      range: rangeSell\n    },\n    recent_series: recentSeries,\n    summary_en: summaryEn,\n    signals,\n    _chart_fields: [\"recent_series\"]\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1360,
-        -1720
+        1040,
+        0
       ],
       "id": "bcb-ptax-parse-node",
       "name": "BCB PTAX Parse"
@@ -80,14 +80,14 @@
       "parameters": {
         "operation": "insert",
         "collection": "raw_prices",
-        "options": {},
-        "fields": "source,source_url,source_format,source_url_template,country,macroarea,collected_at,lookback_days,query_start_date,query_end_date,total_quotes,quote_date,dataHoraCotacao,cotacaoCompra,cotacaoVenda,spread,movement_label,previous_quote_date,previous_dataHoraCotacao,previous_cotacaoCompra,previous_cotacaoVenda,change_vs_previous,change_pct_vs_previous,sell_stats_lookback,recent_series,summary_en,signals"
+        "fields": "source,source_url,source_format,source_url_template,country,macroarea,collected_at,lookback_days,query_start_date,query_end_date,total_quotes,quote_date,dataHoraCotacao,cotacaoCompra,cotacaoVenda,spread,movement_label,previous_quote_date,previous_dataHoraCotacao,previous_cotacaoCompra,previous_cotacaoVenda,change_vs_previous,change_pct_vs_previous,sell_stats_lookback,recent_series,summary_en,signals,_chart_fields,collected_period",
+        "options": {}
       },
       "type": "n8n-nodes-base.mongoDb",
       "typeVersion": 1,
       "position": [
-        -1120,
-        -1720
+        1820,
+        0
       ],
       "id": "bcb-mongo-raw-prices-node",
       "name": "BCB MongoDB raw_prices",
@@ -96,7 +96,9 @@
           "id": "Jo4ZHZCY4HM8JRrD",
           "name": "MongoDB account"
         }
-      }
+      },
+      "onError": "continueRegularOutput",
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -106,8 +108,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -880,
-        -1720
+        2080,
+        0
       ],
       "id": "bcb-build-log-node",
       "name": "BCB Build Ingestion Log"
@@ -121,8 +123,8 @@
       "type": "n8n-nodes-base.mongoDb",
       "typeVersion": 1,
       "position": [
-        -640,
-        -1720
+        2340,
+        0
       ],
       "id": "bcb-mongo-log-node",
       "name": "BCB MongoDB ingestion_log",
@@ -149,8 +151,8 @@
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
       "typeVersion": 1.5,
       "position": [
-        -880,
-        -1720
+        1300,
+        0
       ],
       "id": "bcb-ai-signals-node",
       "name": "BCB AI Signals",
@@ -172,8 +174,8 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1.3,
       "position": [
-        -880,
-        -1520
+        1300,
+        240
       ],
       "id": "bcb-openai-signals-node",
       "name": "BCB OpenAI Signals Model",
@@ -194,8 +196,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -640,
-        -1720
+        1560,
+        0
       ],
       "id": "bcb-parse-signals-node",
       "name": "BCB Parse Signals"
@@ -206,8 +208,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1380,
-        -1720
+        520,
+        0
       ],
       "parameters": {
         "jsCode": "// Se BCB è down (502/timeout), logga skip e interrompi senza errore\nconst item = $input.first();\nconst err = item.json?.error ?? item.error?.message ?? '';\nconst statusCode = item.json?.statusCode ?? item.json?.status ?? 0;\n\nif (err || statusCode >= 400) {\n  // Scrivi direttamente nel log e termina silenziosamente\n  return [{\n    json: {\n      _api_skip: true,\n      source: 'BCB_PTAX',\n      country: 'BR',\n      status: 'skipped_api_error',\n      reason: `BCB API unavailable: ${err || 'HTTP ' + statusCode}`,\n      run_date: new Date().toISOString(),\n      completed_at: new Date().toISOString()\n    }\n  }];\n}\n// API OK — passa il dato al Parse\nreturn [{ json: item.json }];\n"
@@ -219,8 +221,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        -1160,
-        -1720
+        780,
+        0
       ],
       "parameters": {
         "conditions": {
@@ -250,8 +252,8 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -440,
-        -1720
+        2600,
+        0
       ],
       "parameters": {
         "mode": "manual",
@@ -286,8 +288,8 @@
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1,
       "position": [
-        -2240,
-        -1705
+        0,
+        -200
       ],
       "id": "execute-workflow-trigger-joNcZFDe",
       "name": "Execute Workflow Trigger"

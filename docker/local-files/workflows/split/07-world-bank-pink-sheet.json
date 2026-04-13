@@ -6,8 +6,8 @@
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
       "position": [
-        -2720,
-        -2580
+        0,
+        0
       ],
       "id": "manual-trigger-worldbank",
       "name": "Manual Trigger"
@@ -26,8 +26,8 @@
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        -2720,
-        -2460
+        0,
+        200
       ],
       "id": "schedule-trigger-worldbank",
       "name": "Schedule Trigger"
@@ -47,8 +47,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -1840,
-        -2520
+        780,
+        0
       ],
       "id": "wb-pink-sheet-download-node",
       "name": "World Bank Pink Sheet Download",
@@ -60,7 +60,7 @@
         "binaryPropertyName": "data",
         "options": {
           "sheetName": "Monthly Prices",
-          "range": "A5:N5000",
+          "range": "A5:BZ5000",
           "includeEmptyCells": true,
           "headerRow": false
         }
@@ -68,21 +68,21 @@
       "type": "n8n-nodes-base.extractFromFile",
       "typeVersion": 1.1,
       "position": [
-        -1600,
-        -2520
+        1560,
+        0
       ],
       "id": "wb-pink-sheet-extract-node",
       "name": "World Bank Pink Sheet Extract"
     },
     {
       "parameters": {
-        "jsCode": "function getCollectedPeriod(isoTs, cadenza) {\n  const d = new Date(isoTs || new Date().toISOString());\n  const pad = n => String(n).padStart(2, '0');\n  const yyyy = d.getUTCFullYear();\n  const mm = pad(d.getUTCMonth() + 1);\n  const dd = pad(d.getUTCDate());\n  const hh = pad(d.getUTCHours());\n  const doy = Math.floor((d - new Date(Date.UTC(yyyy,0,1))) / 86400000);\n  const week = pad(Math.ceil((doy + new Date(Date.UTC(yyyy,0,1)).getUTCDay() + 1) / 7));\n  switch((cadenza||'').toLowerCase()) {\n    case 'hourly':  return `${yyyy}-${mm}-${dd}T${hh}`;\n    case 'daily':   return `${yyyy}-${mm}-${dd}`;\n    case 'weekly':  return `${yyyy}-W${week}`;\n    case 'monthly': return `${yyyy}-${mm}`;\n    default:        return `${yyyy}-${mm}-${dd}`;\n  }\n}\nconst now = new Date().toISOString();\nconst _collectedPeriod = getCollectedPeriod(now, 'monthly');\nconst expectedFreshnessHours = 24 * 35;\nconst isFresh = (new Date() - new Date(now)) / 3600000 < expectedFreshnessHours;\n\nconst lookbackMonths = 6;\nconst sourceFileUrl = $('World Bank Extract URL').item.json.excelUrl;\nconst extractedRows = $input.all()\n  .map((item) => Array.isArray(item.json.row) ? item.json.row : [])\n  .filter((row) => row.length);\n\nif (extractedRows.length < 4) {\n  throw new Error('World Bank Pink Sheet extract returned too few rows');\n}\n\nfunction normalizeText(value) {\n  return String(value ?? '').trim();\n}\n\nfunction normalizeNumber(value, decimals = 4) {\n  if (value === null || value === undefined) return null;\n  if (typeof value === 'number') {\n    if (!Number.isFinite(value)) return null;\n    return Number(value.toFixed(decimals));\n  }\n\n  const text = normalizeText(value);\n  if (!text || text === '...' || text === '…') return null;\n\n  const numeric = Number(text.replace(/,/g, ''));\n  if (Number.isNaN(numeric)) return null;\n  return Number(numeric.toFixed(decimals));\n}\n\nfunction parsePeriod(periodRaw) {\n  const match = /^(\\d{4})M(\\d{2})$/.exec(periodRaw);\n  if (!match) return null;\n  return {\n    period_raw: periodRaw,\n    report_month: `${match[1]}-${match[2]}`,\n    report_date: `${match[1]}-${match[2]}-01`\n  };\n}\n\nfunction buildStats(values, decimals = 4) {\n  if (!values.length) return null;\n  const min = Math.min(...values);\n  const max = Math.max(...values);\n  const avg = values.reduce((sum, value) => sum + value, 0) / values.length;\n  return {\n    min: Number(min.toFixed(decimals)),\n    avg: Number(avg.toFixed(decimals)),\n    max: Number(max.toFixed(decimals)),\n    range: Number((max - min).toFixed(decimals))\n  };\n}\n\nconst headerRow = extractedRows[0].map(normalizeText);\nconst unitsRow = extractedRows[1].map(normalizeText);\nconst arabicaIndex = headerRow.findIndex((value) => value === 'Coffee, Arabica');\nconst robustaIndex = headerRow.findIndex((value) => value === 'Coffee, Robusta');\n\nif (arabicaIndex === -1 || robustaIndex === -1) {\n  throw new Error('World Bank Pink Sheet columns Coffee, Arabica / Coffee, Robusta not found');\n}\n\nconst arabicaUnit = unitsRow[arabicaIndex] || null;\nconst robustaUnit = unitsRow[robustaIndex] || null;\n\nconst rows = extractedRows\n  .slice(2)\n  .map((row) => {\n    const periodInfo = parsePeriod(normalizeText(row[0]));\n    if (!periodInfo) return null;\n\n    const arabica = normalizeNumber(row[arabicaIndex], 4);\n    const robusta = normalizeNumber(row[robustaIndex], 4);\n    if (arabica === null || robusta === null) return null;\n\n    return {\n      ...periodInfo,\n      coffee_arabica_price: arabica,\n      coffee_robusta_price: robusta,\n      arabica_robusta_spread: Number((arabica - robusta).toFixed(4))\n    };\n  })\n  .filter((row) => row !== null)\n  .sort((a, b) => a.period_raw.localeCompare(b.period_raw));\n\nif (!rows.length) {\n  throw new Error('World Bank Pink Sheet returned no valid coffee observations');\n}\n\nconst latest = rows[rows.length - 1];\nconst previous = rows.length > 1 ? rows[rows.length - 2] : null;\nconst recentSeries = rows.slice(-lookbackMonths);\nconst arabicaStats = buildStats(recentSeries.map((row) => row.coffee_arabica_price));\nconst robustaStats = buildStats(recentSeries.map((row) => row.coffee_robusta_price));\nconst spreadStats = buildStats(recentSeries.map((row) => row.arabica_robusta_spread));\n\nconst changeMomArabica = previous ? Number((latest.coffee_arabica_price - previous.coffee_arabica_price).toFixed(4)) : null;\nconst changePctMomArabica = previous && previous.coffee_arabica_price ? Number((((latest.coffee_arabica_price - previous.coffee_arabica_price) / previous.coffee_arabica_price) * 100).toFixed(4)) : null;\nconst changeMomRobusta = previous ? Number((latest.coffee_robusta_price - previous.coffee_robusta_price).toFixed(4)) : null;\nconst changePctMomRobusta = previous && previous.coffee_robusta_price ? Number((((latest.coffee_robusta_price - previous.coffee_robusta_price) / previous.coffee_robusta_price) * 100).toFixed(4)) : null;\nconst changeMomSpread = previous ? Number((latest.arabica_robusta_spread - previous.arabica_robusta_spread).toFixed(4)) : null;\n\nlet movementLabel = 'mixed';\nif (changeMomArabica === 0 && changeMomRobusta === 0) movementLabel = 'stable';\nelse if ((changeMomArabica ?? 0) > 0 && (changeMomRobusta ?? 0) > 0) movementLabel = 'coffee_benchmarks_up';\nelse if ((changeMomArabica ?? 0) < 0 && (changeMomRobusta ?? 0) < 0) movementLabel = 'coffee_benchmarks_down';\n\nlet summaryEn = `Latest World Bank Pink Sheet monthly observation for ${latest.report_month} shows Arabica at ${latest.coffee_arabica_price.toFixed(4)} USD/kg and Robusta at ${latest.coffee_robusta_price.toFixed(4)} USD/kg.`;\nconst signals = [\n  `Latest Arabica ${latest.coffee_arabica_price.toFixed(4)} USD/kg`,\n  `Latest Robusta ${latest.coffee_robusta_price.toFixed(4)} USD/kg`,\n  `Latest Arabica-Robusta spread ${latest.arabica_robusta_spread.toFixed(4)} USD/kg`,\n  `${lookbackMonths}-month Arabica range ${arabicaStats ? arabicaStats.range.toFixed(4) : 'n/a'} USD/kg`,\n  `${lookbackMonths}-month Robusta range ${robustaStats ? robustaStats.range.toFixed(4) : 'n/a'} USD/kg`\n];\n\nif (previous) {\n  summaryEn += ` Versus ${previous.report_month}, Arabica changed by ${changeMomArabica.toFixed(4)} USD/kg (${changePctMomArabica.toFixed(4)}%) and Robusta changed by ${changeMomRobusta.toFixed(4)} USD/kg (${changePctMomRobusta.toFixed(4)}%).`;\n\n  if (movementLabel === 'coffee_benchmarks_up') {\n    summaryEn += ' Both coffee benchmarks moved up month over month.';\n    signals.push('Arabica and Robusta both increased month over month');\n  } else if (movementLabel === 'coffee_benchmarks_down') {\n    summaryEn += ' Both coffee benchmarks moved down month over month.';\n    signals.push('Arabica and Robusta both decreased month over month');\n  } else if (movementLabel === 'stable') {\n    signals.push('Arabica and Robusta unchanged month over month');\n  } else {\n    summaryEn += ' Arabica and Robusta moved in different directions month over month.';\n    signals.push('Arabica and Robusta moved in different directions month over month');\n  }\n}\n\nreturn [{\n  json: {\n    source: 'WB_PINK_SHEET',\n    source_format: 'xlsx',\n    source_file_url: sourceFileUrl,\n    source_url: sourceFileUrl,\n    country: 'BR',\n    macroarea: 'prices',\n    collected_at: now,\n    collected_period: _collectedPeriod,\n        is_fresh: isFresh,\n    dataset: 'CMO_HISTORICAL_DATA_MONTHLY',\n    sheet_name: 'Monthly Prices',\n    price_unit: arabicaUnit === robustaUnit ? arabicaUnit : null,\n    arabica_unit: arabicaUnit,\n    robusta_unit: robustaUnit,\n    lookback_months: lookbackMonths,\n    total_observations: rows.length,\n    report_period: latest.period_raw,\n    report_month: latest.report_month,\n    report_date: latest.report_date,\n    coffee_arabica_price: latest.coffee_arabica_price,\n    coffee_robusta_price: latest.coffee_robusta_price,\n    arabica_robusta_spread: latest.arabica_robusta_spread,\n    movement_label: movementLabel,\n    previous_report_period: previous ? previous.period_raw : null,\n    previous_report_month: previous ? previous.report_month : null,\n    previous_report_date: previous ? previous.report_date : null,\n    previous_coffee_arabica_price: previous ? previous.coffee_arabica_price : null,\n    previous_coffee_robusta_price: previous ? previous.coffee_robusta_price : null,\n    previous_arabica_robusta_spread: previous ? previous.arabica_robusta_spread : null,\n    change_mom_arabica: changeMomArabica,\n    change_pct_mom_arabica: changePctMomArabica,\n    change_mom_robusta: changeMomRobusta,\n    change_pct_mom_robusta: changePctMomRobusta,\n    change_mom_spread: changeMomSpread,\n    coffee_price_stats_lookback: {\n      arabica: arabicaStats,\n      robusta: robustaStats,\n      spread: spreadStats\n    },\n    recent_series: recentSeries,\n    summary_en: summaryEn,\n    signals,\n    _chart_fields: [\"recent_series\"]\n  }\n}];"
+        "jsCode": "function getCollectedPeriod(isoTs, cadenza) {\n  const d = new Date(isoTs || new Date().toISOString());\n  const pad = n => String(n).padStart(2, '0');\n  const yyyy = d.getUTCFullYear();\n  const mm = pad(d.getUTCMonth() + 1);\n  const dd = pad(d.getUTCDate());\n  const hh = pad(d.getUTCHours());\n  const doy = Math.floor((d - new Date(Date.UTC(yyyy,0,1))) / 86400000);\n  const week = pad(Math.ceil((doy + new Date(Date.UTC(yyyy,0,1)).getUTCDay() + 1) / 7));\n  switch((cadenza||'').toLowerCase()) {\n    case 'hourly':  return `${yyyy}-${mm}-${dd}T${hh}`;\n    case 'daily':   return `${yyyy}-${mm}-${dd}`;\n    case 'weekly':  return `${yyyy}-W${week}`;\n    case 'monthly': return `${yyyy}-${mm}`;\n    default:        return `${yyyy}-${mm}-${dd}`;\n  }\n}\nconst now = new Date().toISOString();\nconst _collectedPeriod = getCollectedPeriod(now, 'monthly');\nconst expectedFreshnessHours = 24 * 35;\nconst isFresh = (new Date() - new Date(now)) / 3600000 < expectedFreshnessHours;\n\nconst lookbackMonths = 120;\nconst sourceFileUrl = $('World Bank Extract URL').item.json.excelUrl;\nconst extractedRows = $input.all()\n  .map((item) => Array.isArray(item.json.row) ? item.json.row : [])\n  .filter((row) => row.length);\n\nif (extractedRows.length < 4) {\n  throw new Error('World Bank Pink Sheet extract returned too few rows');\n}\n\nfunction normalizeText(value) {\n  return String(value ?? '').trim();\n}\n\nfunction normalizeNumber(value, decimals = 4) {\n  if (value === null || value === undefined) return null;\n  if (typeof value === 'number') {\n    if (!Number.isFinite(value)) return null;\n    return Number(value.toFixed(decimals));\n  }\n\n  const text = normalizeText(value);\n  if (!text || text === '...' || text === '…') return null;\n\n  const numeric = Number(text.replace(/,/g, ''));\n  if (Number.isNaN(numeric)) return null;\n  return Number(numeric.toFixed(decimals));\n}\n\nfunction parsePeriod(periodRaw) {\n  const match = /^(\\d{4})M(\\d{2})$/.exec(periodRaw);\n  if (!match) return null;\n  return {\n    period_raw: periodRaw,\n    report_month: `${match[1]}-${match[2]}`,\n    report_date: `${match[1]}-${match[2]}-01`\n  };\n}\n\nfunction buildStats(values, decimals = 4) {\n  if (!values.length) return null;\n  const min = Math.min(...values);\n  const max = Math.max(...values);\n  const avg = values.reduce((sum, value) => sum + value, 0) / values.length;\n  return {\n    min: Number(min.toFixed(decimals)),\n    avg: Number(avg.toFixed(decimals)),\n    max: Number(max.toFixed(decimals)),\n    range: Number((max - min).toFixed(decimals))\n  };\n}\n\nconst headerRow = extractedRows[0].map(normalizeText);\nconst unitsRow = extractedRows[1].map(normalizeText);\nconst arabicaIndex = headerRow.findIndex((value) => value === 'Coffee, Arabica');\nconst robustaIndex = headerRow.findIndex((value) => value === 'Coffee, Robusta');\n\nif (arabicaIndex === -1 || robustaIndex === -1) {\n  throw new Error('World Bank Pink Sheet columns Coffee, Arabica / Coffee, Robusta not found');\n}\n\nconst arabicaUnit = unitsRow[arabicaIndex] || null;\nconst robustaUnit = unitsRow[robustaIndex] || null;\n\nconst dapIndex       = headerRow.findIndex((v) => v.toLowerCase().includes('dap'));\nconst ureaIndex      = headerRow.findIndex((v) => v.toLowerCase().includes('urea'));\nconst potashIndex    = headerRow.findIndex((v) => v.toLowerCase().includes('potassium') || v.toLowerCase().includes('mop'));\nconst fertAvailable  = dapIndex !== -1 || ureaIndex !== -1 || potashIndex !== -1;\nconst dapUnit        = dapIndex    !== -1 ? (unitsRow[dapIndex]    || null) : null;\nconst ureaUnit       = ureaIndex   !== -1 ? (unitsRow[ureaIndex]   || null) : null;\nconst potashUnit     = potashIndex !== -1 ? (unitsRow[potashIndex] || null) : null;\n\n\nconst rows = extractedRows\n  .slice(2)\n  .map((row) => {\n    const periodInfo = parsePeriod(normalizeText(row[0]));\n    if (!periodInfo) return null;\n\n    const arabica = normalizeNumber(row[arabicaIndex], 4);\n    const robusta = normalizeNumber(row[robustaIndex], 4);\n    if (arabica === null || robusta === null) return null;\n\n    const dap    = dapIndex    !== -1 ? normalizeNumber(row[dapIndex],    4) : null;\n    const urea   = ureaIndex   !== -1 ? normalizeNumber(row[ureaIndex],   4) : null;\n    const potash = potashIndex !== -1 ? normalizeNumber(row[potashIndex], 4) : null;\n    return {\n      ...periodInfo,\n      coffee_arabica_price: arabica,\n      coffee_robusta_price: robusta,\n      arabica_robusta_spread: Number((arabica - robusta).toFixed(4)),\n      dap_usd_t:    dap,\n      urea_usd_t:   urea,\n      potash_usd_t: potash,\n    };\n  })\n  .filter((row) => row !== null)\n  .sort((a, b) => a.period_raw.localeCompare(b.period_raw));\n\nif (!rows.length) {\n  throw new Error('World Bank Pink Sheet returned no valid coffee observations');\n}\n\nconst latest = rows[rows.length - 1];\nconst previous = rows.length > 1 ? rows[rows.length - 2] : null;\nconst recentSeries = rows.slice(-lookbackMonths);\n\nconst fertilizerSeries = rows.map((r) => ({\n  report_date:  r.report_date,\n  report_month: r.report_month,\n  dap_usd_t:    r.dap_usd_t,\n  urea_usd_t:   r.urea_usd_t,\n  potash_usd_t: r.potash_usd_t,\n})).filter((r) => r.dap_usd_t !== null || r.urea_usd_t !== null || r.potash_usd_t !== null);\n\nconst fertilizerLatest = fertilizerSeries.length ? fertilizerSeries[fertilizerSeries.length - 1] : null;\nconst fertilizerPrevious = fertilizerSeries.length > 1 ? fertilizerSeries[fertilizerSeries.length - 2] : null;\nconst fertStats = {\n  dap:    buildStats(fertilizerSeries.map((r) => r.dap_usd_t).filter((v) => v !== null)),\n  urea:   buildStats(fertilizerSeries.map((r) => r.urea_usd_t).filter((v) => v !== null)),\n  potash: buildStats(fertilizerSeries.map((r) => r.potash_usd_t).filter((v) => v !== null)),\n};\n\nconst arabicaStats = buildStats(recentSeries.map((row) => row.coffee_arabica_price));\nconst robustaStats = buildStats(recentSeries.map((row) => row.coffee_robusta_price));\nconst spreadStats = buildStats(recentSeries.map((row) => row.arabica_robusta_spread));\n\nconst changeMomArabica = previous ? Number((latest.coffee_arabica_price - previous.coffee_arabica_price).toFixed(4)) : null;\nconst changePctMomArabica = previous && previous.coffee_arabica_price ? Number((((latest.coffee_arabica_price - previous.coffee_arabica_price) / previous.coffee_arabica_price) * 100).toFixed(4)) : null;\nconst changeMomRobusta = previous ? Number((latest.coffee_robusta_price - previous.coffee_robusta_price).toFixed(4)) : null;\nconst changePctMomRobusta = previous && previous.coffee_robusta_price ? Number((((latest.coffee_robusta_price - previous.coffee_robusta_price) / previous.coffee_robusta_price) * 100).toFixed(4)) : null;\nconst changeMomSpread = previous ? Number((latest.arabica_robusta_spread - previous.arabica_robusta_spread).toFixed(4)) : null;\n\nlet movementLabel = 'mixed';\nif (changeMomArabica === 0 && changeMomRobusta === 0) movementLabel = 'stable';\nelse if ((changeMomArabica ?? 0) > 0 && (changeMomRobusta ?? 0) > 0) movementLabel = 'coffee_benchmarks_up';\nelse if ((changeMomArabica ?? 0) < 0 && (changeMomRobusta ?? 0) < 0) movementLabel = 'coffee_benchmarks_down';\n\nlet summaryEn = `Latest World Bank Pink Sheet monthly observation for ${latest.report_month} shows Arabica at ${latest.coffee_arabica_price.toFixed(4)} USD/kg and Robusta at ${latest.coffee_robusta_price.toFixed(4)} USD/kg.`;\nconst signals = [\n  `Latest Arabica ${latest.coffee_arabica_price.toFixed(4)} USD/kg`,\n  `Latest Robusta ${latest.coffee_robusta_price.toFixed(4)} USD/kg`,\n  `Latest Arabica-Robusta spread ${latest.arabica_robusta_spread.toFixed(4)} USD/kg`,\n  `${lookbackMonths}-month Arabica range ${arabicaStats ? arabicaStats.range.toFixed(4) : 'n/a'} USD/kg`,\n  `${lookbackMonths}-month Robusta range ${robustaStats ? robustaStats.range.toFixed(4) : 'n/a'} USD/kg`\n];\n\nif (previous) {\n  summaryEn += ` Versus ${previous.report_month}, Arabica changed by ${changeMomArabica.toFixed(4)} USD/kg (${changePctMomArabica.toFixed(4)}%) and Robusta changed by ${changeMomRobusta.toFixed(4)} USD/kg (${changePctMomRobusta.toFixed(4)}%).`;\n\n  if (movementLabel === 'coffee_benchmarks_up') {\n    summaryEn += ' Both coffee benchmarks moved up month over month.';\n    signals.push('Arabica and Robusta both increased month over month');\n  } else if (movementLabel === 'coffee_benchmarks_down') {\n    summaryEn += ' Both coffee benchmarks moved down month over month.';\n    signals.push('Arabica and Robusta both decreased month over month');\n  } else if (movementLabel === 'stable') {\n    signals.push('Arabica and Robusta unchanged month over month');\n  } else {\n    summaryEn += ' Arabica and Robusta moved in different directions month over month.';\n    signals.push('Arabica and Robusta moved in different directions month over month');\n  }\n}\n\nreturn [{\n  json: {\n    source: 'WB_PINK_SHEET',\n    source_format: 'xlsx',\n    source_file_url: sourceFileUrl,\n    source_url: sourceFileUrl,\n    country: 'BR',\n    macroarea: 'prices',\n    collected_at: now,\n    collected_period: _collectedPeriod,\n        is_fresh: isFresh,\n    dataset: 'CMO_HISTORICAL_DATA_MONTHLY',\n    sheet_name: 'Monthly Prices',\n    price_unit: arabicaUnit === robustaUnit ? arabicaUnit : null,\n    arabica_unit: arabicaUnit,\n    robusta_unit: robustaUnit,\n    lookback_months: lookbackMonths,\n    total_observations: rows.length,\n    report_period: latest.period_raw,\n    report_month: latest.report_month,\n    report_date: latest.report_date,\n    coffee_arabica_price: latest.coffee_arabica_price,\n    coffee_robusta_price: latest.coffee_robusta_price,\n    arabica_robusta_spread: latest.arabica_robusta_spread,\n    movement_label: movementLabel,\n    previous_report_period: previous ? previous.period_raw : null,\n    previous_report_month: previous ? previous.report_month : null,\n    previous_report_date: previous ? previous.report_date : null,\n    previous_coffee_arabica_price: previous ? previous.coffee_arabica_price : null,\n    previous_coffee_robusta_price: previous ? previous.coffee_robusta_price : null,\n    previous_arabica_robusta_spread: previous ? previous.arabica_robusta_spread : null,\n    change_mom_arabica: changeMomArabica,\n    change_pct_mom_arabica: changePctMomArabica,\n    change_mom_robusta: changeMomRobusta,\n    change_pct_mom_robusta: changePctMomRobusta,\n    change_mom_spread: changeMomSpread,\n    coffee_price_stats_lookback: {\n      arabica: arabicaStats,\n      robusta: robustaStats,\n      spread: spreadStats\n    },\n    recent_series: recentSeries,\n    summary_en: summaryEn,\n    signals,\n    fertilizer_available: fertAvailable,\n    fertilizer_units: { dap: dapUnit, urea: ureaUnit, potash: potashUnit },\n    fertilizer_latest: fertilizerLatest,\n    fertilizer_previous: fertilizerPrevious,\n    fertilizer_stats: fertStats,\n    fertilizer_series: fertilizerSeries,\n    _chart_fields: [\"recent_series\", \"fertilizer_series\"]\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1360,
-        -2520
+        1820,
+        0
       ],
       "id": "wb-pink-sheet-parse-node",
       "name": "World Bank Pink Sheet Parse"
@@ -91,14 +91,14 @@
       "parameters": {
         "operation": "insert",
         "collection": "raw_prices",
-        "options": {},
-        "fields": "source,source_url,source_format,source_file_url,country,macroarea,collected_at,dataset,sheet_name,price_unit,arabica_unit,robusta_unit,lookback_months,total_observations,report_period,report_month,report_date,coffee_arabica_price,coffee_robusta_price,arabica_robusta_spread,movement_label,previous_report_period,previous_report_month,previous_report_date,previous_coffee_arabica_price,previous_coffee_robusta_price,previous_arabica_robusta_spread,change_mom_arabica,change_pct_mom_arabica,change_mom_robusta,change_pct_mom_robusta,change_mom_spread,coffee_price_stats_lookback,recent_series,summary_en,signals"
+        "fields": "source,source_url,source_format,source_file_url,country,macroarea,collected_at,collected_period,dataset,sheet_name,price_unit,arabica_unit,robusta_unit,lookback_months,total_observations,report_period,report_month,report_date,coffee_arabica_price,coffee_robusta_price,arabica_robusta_spread,movement_label,previous_report_period,previous_report_month,previous_report_date,previous_coffee_arabica_price,previous_coffee_robusta_price,previous_arabica_robusta_spread,change_mom_arabica,change_pct_mom_arabica,change_mom_robusta,change_pct_mom_robusta,change_mom_spread,coffee_price_stats_lookback,recent_series,fertilizer_available,fertilizer_units,fertilizer_latest,fertilizer_previous,fertilizer_stats,fertilizer_series,summary_en,signals,_chart_fields",
+        "options": {}
       },
       "type": "n8n-nodes-base.mongoDb",
       "typeVersion": 1,
       "position": [
-        -1120,
-        -2520
+        2600,
+        0
       ],
       "id": "wb-mongo-raw-prices-node",
       "name": "World Bank MongoDB raw_prices",
@@ -107,7 +107,9 @@
           "id": "Jo4ZHZCY4HM8JRrD",
           "name": "MongoDB account"
         }
-      }
+      },
+      "onError": "continueRegularOutput",
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -116,8 +118,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -880,
-        -2520
+        2860,
+        0
       ],
       "id": "wb-build-log-node",
       "name": "World Bank Build Ingestion Log"
@@ -131,8 +133,8 @@
       "type": "n8n-nodes-base.mongoDb",
       "typeVersion": 1,
       "position": [
-        -640,
-        -2520
+        3120,
+        0
       ],
       "id": "wb-mongo-log-node",
       "name": "World Bank MongoDB ingestion_log",
@@ -158,8 +160,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        -2320,
-        -2520
+        260,
+        0
       ],
       "id": "wb-fetch-page-node",
       "name": "World Bank Fetch Page"
@@ -171,8 +173,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -2080,
-        -2520
+        520,
+        0
       ],
       "id": "wb-extract-url-node",
       "name": "World Bank Extract URL"
@@ -193,8 +195,8 @@
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
       "typeVersion": 1.5,
       "position": [
-        -880,
-        -2520
+        2080,
+        0
       ],
       "id": "wb-ai-signals-node",
       "name": "World Bank AI Signals",
@@ -216,8 +218,8 @@
       "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
       "typeVersion": 1.3,
       "position": [
-        -880,
-        -2320
+        2080,
+        240
       ],
       "id": "wb-openai-signals-node",
       "name": "World Bank OpenAI Signals Model",
@@ -237,8 +239,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -640,
-        -2520
+        2340,
+        0
       ],
       "id": "wb-parse-signals-node",
       "name": "World Bank Parse Signals"
@@ -249,8 +251,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -1620,
-        -2520
+        1040,
+        0
       ],
       "parameters": {
         "jsCode": "const item = $input.first();\nconst err = item.json?.error ?? item.error?.message ?? '';\nconst statusCode = item.json?.statusCode ?? item.json?.status ?? 0;\nif (err || statusCode >= 400) {\n  return [{ json: {\n    _api_skip: true,\n    source: '07_WORLD_BANK_PINK_SHEET',\n    country: 'BR',\n    status: 'skipped_api_error',\n    reason: `API unavailable: ${err || 'HTTP ' + statusCode}`,\n    run_date: new Date().toISOString(),\n    completed_at: new Date().toISOString()\n  } }];\n}\nreturn [{ json: item.json, binary: item.binary }];"
@@ -262,8 +264,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        -1400,
-        -2520
+        1300,
+        0
       ],
       "parameters": {
         "conditions": {
@@ -293,8 +295,8 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -440,
-        -2520
+        3380,
+        0
       ],
       "parameters": {
         "mode": "manual",
@@ -329,8 +331,8 @@
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1,
       "position": [
-        -2960,
-        -2508
+        0,
+        -200
       ],
       "id": "execute-workflow-trigger-MR9h5J37",
       "name": "Execute Workflow Trigger"
