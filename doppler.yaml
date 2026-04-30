@@ -1,0 +1,3 @@
+setup:
+  project: lavazza-ifab
+  config: dev

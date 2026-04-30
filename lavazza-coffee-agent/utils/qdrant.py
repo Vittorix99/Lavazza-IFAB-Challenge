@@ -23,7 +23,10 @@ _client: QdrantClient | None = None
 def get_client() -> QdrantClient:
     global _client
     if _client is None:
-        _client = QdrantClient(url=os.environ.get("QDRANT_URL", "http://localhost:6333"))
+        _client = QdrantClient(
+            url=os.environ.get("QDRANT_URL", "http://localhost:6333"),
+            api_key=os.environ.get("QDRANT_API_KEY") or None,
+        )
     return _client
 
 

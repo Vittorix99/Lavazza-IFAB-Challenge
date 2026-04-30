@@ -793,13 +793,34 @@ def _build_chat_context(question: str) -> tuple[str, dict]:
         debug["agent_run"] = {"date": run_date, "score": score, "type": last_run.get("report_type", "?")}
 
     # ── 2. Ricerca semantica Qdrant ────────────────────────────────────────
+    # geo_texts: limit alto (10) perché accumula notizie orarie GDELT/WTO —
+    # è l'unico modo per recuperare notizie storiche oltre l'ultimo documento.
+    _QDRANT_LIMITS = {"geo_texts": 10, "crops_texts": 5, "reports_archive": 5}
+
+    # Mappa keyword → nome sorgente nei payload Qdrant.
+    # Usata per ricerche targeted quando la query menziona una fonte specifica:
+    # "gdelt" non compare nel testo embedded (solo summary_en + signals),
+    # quindi la ricerca semantica non restituisce risultati GDELT.
+    # La ricerca con filtro source bypassa questo problema.
+    _SOURCE_KEYWORD_MAP = {
+        "gdelt": ("geo_texts", "GDELT"),
+        "wto": ("geo_texts", "WTO_RSS"),
+        "nasa": ("geo_texts", "NASA_FIRMS"),
+        "ais": ("geo_texts", "AISSTREAM_PORT_CONGESTION"),
+        "port congestion": ("geo_texts", "AISSTREAM_PORT_CONGESTION"),
+        "congestion": ("geo_texts", "AISSTREAM_PORT_CONGESTION"),
+        "conab": ("crops_texts", "CONAB"),
+        "faostat": ("crops_texts", "FAOSTAT"),
+    }
+
     embedding = _get_embedding(question)
     if embedding:
         for coll in ["geo_texts", "crops_texts", "reports_archive"]:
             if not collection_exists(coll):
                 debug["qdrant"][coll] = "non trovata"
                 continue
-            hits = search(collection=coll, query_vector=embedding, limit=3)
+            limit = _QDRANT_LIMITS.get(coll, 5)
+            hits = search(collection=coll, query_vector=embedding, limit=limit)
             debug["qdrant"][coll] = f"{len(hits)} hit"
             texts = [
                 (h.get("text") or h.get("content") or h.get("summary_en")
@@ -809,35 +830,67 @@ def _build_chat_context(question: str) -> tuple[str, dict]:
             texts = [t for t in texts if t]
             if texts:
                 parts.append(f"=== QDRANT {coll.upper()} ===\n" + "\n---\n".join(texts))
+
+        # Ricerca targeted per fonti specifiche menzionate nella query.
+        # "GDELT" non compare nel testo embedded → il semantic search non trova
+        # documenti GDELT se si chiede "notizie GDELT". Il filtro source risolve.
+        question_lower = question.lower()
+        targeted_hits_by_source: dict[str, list] = {}
+        for keyword, (coll, source_name) in _SOURCE_KEYWORD_MAP.items():
+            if keyword in question_lower and collection_exists(coll):
+                targeted = search(
+                    collection=coll,
+                    query_vector=embedding,
+                    limit=5,
+                    filters={"source": source_name},
+                )
+                if targeted:
+                    targeted_hits_by_source.setdefault(source_name, []).extend(targeted)
+
+        for source_name, t_hits in targeted_hits_by_source.items():
+            texts = [
+                (h.get("text") or h.get("content") or h.get("summary_en")
+                 or h.get("embed_text") or h.get("headline") or "")[:600]
+                for h in t_hits
+            ]
+            texts = [t for t in texts if t]
+            if texts:
+                parts.append(
+                    f"=== QDRANT TARGETED [{source_name}] ===\n" + "\n---\n".join(texts)
+                )
+                debug["qdrant"][f"targeted_{source_name}"] = f"{len(t_hits)} hit"
     else:
         debug["qdrant"]["_embedding"] = "errore"
 
-    # ── 3. MongoDB — un doc per sorgente, tutte le collection raw_* ────────
-    # Schema-agnostico: legge le sorgenti distinte dalla collection,
-    # recupera l'ultimo documento per ognuna, la formatta genericamente.
-    # Qualsiasi nuova sorgente inserita via n8n viene inclusa automaticamente.
+    # ── 3. MongoDB — documenti recenti per sorgente ──────────────────────────
+    # raw_geo (GDELT, WTO): prende gli ultimi 3 documenti per fonte perché
+    # Qdrant geo_texts ha pochi punti e la ricerca semantica non garantisce
+    # che i risultati GDELT compaiano — MongoDB garantisce la presenza.
+    # Per le altre collection basta l'ultimo documento per fonte.
+    _GEO_LIMIT = 3
     RAW_COLLECTIONS = ["raw_geo", "raw_prices", "raw_crops", "raw_environment"]
 
     for col_name in RAW_COLLECTIONS:
         try:
-            # Trova tutte le sorgenti distinte per il Brasile
             sources = db[col_name].distinct("source", {"country": "BR"})
         except Exception:
             sources = []
 
         col_snippets = []
+        n_docs = _GEO_LIMIT if col_name == "raw_geo" else 1
         for src in sorted(sources):
             try:
-                doc = db[col_name].find_one(
+                docs = list(db[col_name].find(
                     {"source": src, "country": "BR"},
                     sort=[("collected_at", -1)],
-                )
-                if doc:
+                    limit=n_docs,
+                ))
+                for doc in docs:
                     col_snippets.append(_format_doc_snippet(doc))
             except Exception:
                 pass
 
-        debug["mongodb"][col_name] = f"{len(col_snippets)} sorgenti"
+        debug["mongodb"][col_name] = f"{len(col_snippets)} documenti"
         if col_snippets:
             parts.append(
                 f"=== {col_name.upper().replace('_', ' ')} ===\n"
@@ -913,8 +966,12 @@ with st.sidebar:
     use_api_fallback = (chart_source == "API Diretta")
     st.divider()
     st.caption("Servizi attivi:")
-    st.caption("• MongoDB localhost:27017")
-    st.caption("• Qdrant localhost:6333")
+    mongo_host = os.environ.get("MONGODB_URI", "")
+    mongo_label = "Atlas Cloud" if "mongodb+srv" in mongo_host else "localhost:27017"
+    qdrant_host = os.environ.get("QDRANT_URL", "localhost:6333")
+    qdrant_label = "Qdrant Cloud" if "cloud.qdrant.io" in qdrant_host else qdrant_host
+    st.caption(f"• MongoDB {mongo_label}")
+    st.caption(f"• Qdrant {qdrant_label}")
     st.caption("• n8n localhost:5678")
     st.divider()
     st.caption("Agenti LangGraph:")
