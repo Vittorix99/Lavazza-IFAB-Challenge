@@ -1,0 +1,9 @@
+requests
+tabulate
+pandas
+faostat
+numpy
+xlrd
+python-dotenv
+scipy
+matplotlib

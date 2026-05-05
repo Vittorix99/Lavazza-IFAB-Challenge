@@ -1,0 +1,296 @@
+================================================================================
+  LAVAZZA COFFEE INTELLIGENCE — GUIDA AVVIO (Windows, PC appena acceso)
+  Aggiornata: 2026-05-03
+================================================================================
+
+ARCHITETTURA REALE DEL SISTEMA
+────────────────────────────────
+  MongoDB     → Atlas Cloud       (nessun container locale necessario)
+  Qdrant      → Container locale  (porta 6333)
+  n8n         → Container locale  (porta 5678)
+  ais-port-probe → Container locale (rete interna, non esposto)
+  Dashboard   → Streamlit su localhost:8501
+
+I segreti (API key, URI cloud, password) sono gestiti su DOPPLER.
+Il file lavazza-coffee-agent\.env è usato solo come FALLBACK.
+
+
+================================================================================
+  PASSO 0 — PREREQUISITI (verificare la prima volta)
+================================================================================
+
+Doppler CLI installato:   doppler --version        → deve mostrare v3.x
+Python 3.11+ installato:  python --version          → deve mostrare 3.x
+Docker Desktop:           deve essere installato
+
+Per installare Doppler se manca (PowerShell come Admin):
+    winget install Doppler.CLI
+
+
+================================================================================
+  PASSO 1 — AVVIARE DOCKER DESKTOP
+================================================================================
+
+Apri Docker Desktop dall'icona in taskbar o dal menu Start.
+Attendi che il logo della balena smetta di animarsi (15-30 secondi).
+
+Verifica che Docker sia attivo:
+    docker ps
+
+Se risponde con una tabella (anche vuota) Docker è pronto.
+Se risponde con un errore "cannot connect", aspetta altri 30 secondi e riprova.
+
+
+================================================================================
+  PASSO 2 — LOGIN DOPPLER (solo la prima volta su questo PC)
+================================================================================
+
+Se non hai ancora fatto il login su questo PC:
+    doppler login
+
+Si apre il browser — accedi con l'account del team (Vittorio-Workspace).
+
+Verifica login:
+    doppler me
+
+Deve mostrare il tuo nome e il workspace "Vittorio-Workspace".
+Se già loggato, salta al Passo 3.
+
+
+================================================================================
+  PASSO 3 — CONFIGURARE DOPPLER PER IL REPO (solo la prima volta)
+================================================================================
+
+Naviga nella cartella del progetto e configura Doppler:
+
+    cd C:\Users\giaco\Desktop\Lavazza-IFAB-Challenge-main
+    doppler setup --project lavazza-ifab --config dev --no-interactive
+
+Verifica che i segreti siano accessibili:
+    doppler secrets --project lavazza-ifab --config dev
+
+Deve mostrare una tabella con ANTHROPIC_API_KEY, MONGODB_URI, ecc.
+
+NOTA: Su questo PC questi passi sono già stati eseguiti.
+
+
+================================================================================
+  PASSO 4 — AVVIARE I CONTAINER DOCKER
+================================================================================
+
+    cd C:\Users\giaco\Desktop\Lavazza-IFAB-Challenge-main\docker
+    docker compose up -d qdrant n8n ais-port-probe
+
+COSA VIENE AVVIATO:
+  - qdrant          → vector store locale (porta 6333)
+  - n8n             → orchestratore workflow ingestion (porta 5678)
+  - ais-port-probe  → microservizio monitoraggio porti (rete interna)
+
+COSA NON VIENE AVVIATO (non necessario):
+  - mongo           → si usa MongoDB Atlas Cloud (URI in Doppler)
+
+Verifica che i container siano up:
+    docker ps
+
+Output atteso:
+    lavazza_ifab-qdrant-1          Up ... (healthy)   127.0.0.1:6333-6334->...
+    lavazza_ifab-n8n-1             Up ...             127.0.0.1:5678->5678/tcp
+    lavazza_ifab-ais-port-probe-1  Up ...             8080/tcp
+
+
+================================================================================
+  PASSO 5 — AGGIORNARE IP WHITELIST MONGODB ATLAS
+================================================================================
+
+Il tuo IP pubblico cambia ad ogni riavvio del router.
+Prima di avviare la dashboard, aggiorna la whitelist Atlas:
+
+    cd C:\Users\giaco\Desktop\Lavazza-IFAB-Challenge-main
+    doppler run -- python scripts\atlas_whitelist_ip.py
+
+Se dice "IP aggiunto alla whitelist" (o si vede l'IP e poi un errore
+di encoding sul carattere spunta — è normale su Windows, l'operazione
+è comunque riuscita).
+
+Se fallisce con errore di autenticazione Atlas, consulta la sezione
+TROUBLESHOOTING in fondo a questa guida.
+
+
+================================================================================
+  PASSO 6 — AVVIARE LA DASHBOARD
+================================================================================
+
+    cd C:\Users\giaco\Desktop\Lavazza-IFAB-Challenge-main\lavazza-coffee-agent
+    doppler run -- .\.venv\Scripts\streamlit run dashboard\app.py
+
+La dashboard è disponibile su:
+    http://localhost:8501
+
+NOTA: Il comando usa .venv (virtual environment Python locale).
+Se .venv non esiste ancora (prima installazione), esegui prima:
+
+    cd C:\Users\giaco\Desktop\Lavazza-IFAB-Challenge-main\lavazza-coffee-agent
+    python -m venv .venv
+    .\.venv\Scripts\pip install -r requirements.txt
+
+
+================================================================================
+  RIEPILOGO AVVIO RAPIDO (PC già configurato)
+================================================================================
+
+Apri PowerShell ed esegui questi comandi nell'ordine:
+
+  1. [Manuale] Avvia Docker Desktop dall'icona
+
+  2. cd C:\Users\giaco\Desktop\Lavazza-IFAB-Challenge-main\docker
+     docker compose up -d qdrant n8n ais-port-probe
+
+  3. cd C:\Users\giaco\Desktop\Lavazza-IFAB-Challenge-main
+     doppler run -- python scripts\atlas_whitelist_ip.py
+
+  4. cd C:\Users\giaco\Desktop\Lavazza-IFAB-Challenge-main\lavazza-coffee-agent
+     doppler run -- .\.venv\Scripts\streamlit run dashboard\app.py
+
+  Dashboard: http://localhost:8501
+  n8n:       http://localhost:5678
+
+
+================================================================================
+  FERMARE TUTTO
+================================================================================
+
+  Ferma la dashboard: Ctrl+C nella finestra PowerShell di Streamlit
+
+  Ferma i container Docker:
+      cd C:\Users\giaco\Desktop\Lavazza-IFAB-Challenge-main\docker
+      docker compose stop
+
+
+================================================================================
+  SEGRETI — COME AGGIORNARLI SU DOPPLER
+================================================================================
+
+Visualizza tutti i segreti:
+    doppler secrets --project lavazza-ifab --config dev
+
+Aggiorna un segreto:
+    doppler secrets set NOME_VARIABILE=nuovovalore --project lavazza-ifab --config dev
+
+Esempio — aggiornare la chiave Anthropic:
+    doppler secrets set ANTHROPIC_API_KEY=sk-ant-api03-... --project lavazza-ifab --config dev
+
+Segreti principali e dove trovarli:
+  ANTHROPIC_API_KEY   → https://console.anthropic.com → API Keys
+  OPENAI_API_KEY      → https://platform.openai.com → API Keys
+  MONGODB_URI         → MongoDB Atlas → Connect → Drivers (già configurato)
+  QDRANT_URL          → http://localhost:6333 (container locale, già ok)
+  ATLAS_CLIENT_ID/SECRET → Atlas → Access Manager → Applications
+
+
+================================================================================
+  SERVIZI E URL
+================================================================================
+
+  Dashboard Streamlit   →   http://localhost:8501
+  n8n Editor            →   http://localhost:5678
+  Qdrant REST API       →   http://localhost:6333
+  MongoDB               →   Atlas Cloud (URI in Doppler)
+
+
+================================================================================
+  TROUBLESHOOTING
+================================================================================
+
+ERRORE: anthropic.AuthenticationError 401 (invalid x-api-key)
+  Causa:  La ANTHROPIC_API_KEY in Doppler è invalida o scaduta.
+  Fix:    Genera una nuova chiave su https://console.anthropic.com → API Keys
+          poi esegui:
+          doppler secrets set ANTHROPIC_API_KEY=sk-ant-api03-TUACHIAVE \
+            --project lavazza-ifab --config dev
+
+ERRORE: Authentication failed su MongoDB Atlas
+  Causa:  Il tuo IP non è in whitelist oppure la password è scaduta.
+  Fix IP: doppler run -- python scripts\atlas_whitelist_ip.py
+  Fix pw: Atlas → Database Access → Edit user → Autogenerate password
+          poi aggiorna su Doppler:
+          doppler secrets set MONGODB_URI=mongodb+srv://user:NUOVAPASSWORD@...
+
+ERRORE: Connection refused su Qdrant (localhost:6333)
+  Causa:  Il container qdrant non è avviato.
+  Fix:    cd docker && docker compose up -d qdrant
+
+ERRORE: Doppler "project not configured"
+  Fix:    cd C:\Users\giaco\Desktop\Lavazza-IFAB-Challenge-main
+          doppler setup --project lavazza-ifab --config dev --no-interactive
+
+ERRORE: ModuleNotFoundError (dipendenza Python mancante)
+  Fix:    cd lavazza-coffee-agent
+          .\.venv\Scripts\pip install -r requirements.txt
+
+ERRORE: Docker "cannot connect to daemon"
+  Causa:  Docker Desktop non è avviato.
+  Fix:    Apri Docker Desktop e aspetta che sia pronto.
+
+ERRORE: UnicodeEncodeError su scripts\atlas_whitelist_ip.py
+  Causa:  Il terminale Windows non supporta il carattere ✓.
+  Note:   L'operazione è comunque andata a buon fine — ignora l'errore.
+
+n8n non mostra workflow:
+  Devi importarli manualmente la prima volta:
+  1. Apri http://localhost:5678
+  2. Settings → Import workflow
+  3. Importa i 13 sub-workflow da docker\local-files\workflows\split\
+  4. Importa il master: docker\local-files\workflows\Lavazza-MASTER-RUN.json
+  5. Aggiorna i workflowId nel master con i nuovi ID assegnati da n8n
+  6. Re-inserisci le credenziali API in n8n → Credentials
+     (OpenAI, NASA FIRMS, USDA, AISSTREAM)
+
+
+=======================================
+Stato del sistema
+=======================================
+Componente	Stato	Note
+Docker — n8n	✅ Up	http://localhost:5678
+Docker — Qdrant	✅ Up (healthy)	http://localhost:6333
+Docker — ais-port-probe	✅ Up	rete interna
+MongoDB Atlas	✅ Connesso	7 collection con dati
+Anthropic API	✅ Chiave valida	(errore precedente era Windows encoding)
+Dashboard Streamlit	✅ Avviata	http://localhost:8501
+Dati presenti in MongoDB
+Collection	Documenti
+raw_environment	33
+raw_geo	31
+raw_prices	27
+ingestion_log	142
+raw_crops	15
+agent_runs	21
+Problemi reali trovati
+Qdrant completamente vuoto — tutte e 3 le collection hanno 0 vettori:
+
+geo_texts: 0 → geo_agent non ha contesto semantico da GDELT/WTO
+crops_texts: 0 → crops_agent non ha contesto da CONAB PDF
+reports_archive: 0 → RAG per report weekly/monthly non funziona
+Questo significa:
+
+Report daily → funziona (usa solo MongoDB raw data + Claude)
+Report weekly/monthly → parziale (manca il contesto RAG storico)
+Chat → risponde ma senza embedding di report precedenti
+n8n workflow da importare — i workflow di ingestion non sono ancora stati importati/configurati. I dati in MongoDB sono quelli già presenti, ma nuova ingestion non partirà fino a che n8n non è configurato con le API key (NASA, USDA, AISSTREAM, FAOSTAT).
+
+
+
+================================================================================
+  COSA HO SCOPERTO RISPETTO A START.TXT (file obsoleto)
+================================================================================
+
+START.txt descrive una configurazione VECCHIA e NON corretta:
+  - Avvia MongoDB e Qdrant come container locali → SBAGLIATO
+    MongoDB è su Atlas Cloud, Qdrant rimane locale ma va avviato
+    esplicitamente insieme a n8n e ais-port-probe.
+  - Usa la porta 27018 per MongoDB locale → Non più necessario
+  - Non menziona Doppler → I segreti devono passare da Doppler
+
+Il file corretto da seguire è SETUP.md.
+Questa guida.txt è l'equivalente Windows di SETUP.md.
+
+================================================================================

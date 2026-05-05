@@ -1,0 +1,775 @@
+{
+  "name": "Lavazza - Comex",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "manual-trigger-comex",
+      "name": "Manual Trigger"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 1 * *"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        200
+      ],
+      "id": "schedule-trigger-comex",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "url": "https://api-comexstat.mdic.gov.br/general/dates/updated",
+        "options": {
+          "allowUnauthorizedCerts": true,
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        260,
+        0
+      ],
+      "id": "comex-updated-check-node",
+      "name": "Comex Updated Check",
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 12000,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const SOURCE_BASE_URL = 'https://api-comexstat.mdic.gov.br';\nconst HISTORY_MONTHS = 6;\nconst PREVIOUS_YEAR_TAIL_FROM_MONTH = 7; // Jul-Dec of previous year to bridge cross-year monthDetail bug.\nconst updated = $json && $json.data ? $json.data : {};\nconst latestYear = Number(updated.year);\nconst latestMonth = Number(updated.monthNumber);\n\nif (!Number.isInteger(latestYear) || !Number.isInteger(latestMonth) || latestMonth < 1 || latestMonth > 12) {\n  throw new Error('Comex Stat updated endpoint returned invalid year/month');\n}\n\nfunction pad(value) {\n  return String(value).padStart(2, '0');\n}\n\nfunction shiftPeriod(year, month, offsetMonths) {\n  const date = new Date(Date.UTC(year, month - 1 + offsetMonths, 1));\n  return {\n    year: date.getUTCFullYear(),\n    month: date.getUTCMonth() + 1,\n    period: date.getUTCFullYear() + '-' + pad(date.getUTCMonth() + 1),\n  };\n}\n\nfunction buildRequest(details, from, to, ncmCodes) {\n  return {\n    flow: 'export',\n    monthDetail: true,\n    period: { from, to },\n    filters: [\n      {\n        filter: 'ncm',\n        values: ncmCodes,\n      },\n    ],\n    details,\n    metrics: ['metricFOB', 'metricKG', 'metricStatistic'],\n  };\n}\n\nconst latestPeriod = shiftPeriod(latestYear, latestMonth, 0);\nconst previousPeriod = shiftPeriod(latestYear, latestMonth, -1);\nconst sameMonthPreviousYear = shiftPeriod(latestYear, latestMonth, -12);\nconst sixMonthStartPeriod = shiftPeriod(latestYear, latestMonth, -(HISTORY_MONTHS - 1));\n\nconst currentYearFromMonth = Math.max(1, latestMonth - (HISTORY_MONTHS - 1));\nconst currentYearFromPeriod = latestYear + '-' + pad(currentYearFromMonth);\nconst previousYear = latestYear - 1;\nconst previousYearTailFromPeriod = previousYear + '-' + pad(PREVIOUS_YEAR_TAIL_FROM_MONTH);\nconst previousYearTailToPeriod = previousYear + '-12';\n\nconst ncmGroups = {\n  green: ['09011110', '09011190', '09011200'],\n  roasted: ['09012100', '09012200'],\n  soluble: ['21011110', '21011190', '21011200'],\n};\nconst ncmCodes = [\n  ...ncmGroups.green,\n  ...ncmGroups.roasted,\n  ...ncmGroups.soluble,\n];\n\nconst stateCountryCurrentRequest = buildRequest(\n  ['state', 'country', 'ncm'],\n  currentYearFromPeriod,\n  latestPeriod.period,\n  ncmCodes,\n);\n\nconst stateCountryPreviousRequest = buildRequest(\n  ['state', 'country', 'ncm'],\n  previousYearTailFromPeriod,\n  previousYearTailToPeriod,\n  ncmCodes,\n);\n\nconst transportCurrentRequest = buildRequest(\n  ['via', 'ncm'],\n  currentYearFromPeriod,\n  latestPeriod.period,\n  ncmCodes,\n);\n\nconst transportPreviousRequest = buildRequest(\n  ['via', 'ncm'],\n  previousYearTailFromPeriod,\n  previousYearTailToPeriod,\n  ncmCodes,\n);\n\nreturn [{\n  json: {\n    source: 'COMEX_STAT',\n    source_format: 'json_api',\n    source_base_url: SOURCE_BASE_URL,\n    source_url: SOURCE_BASE_URL + '/general?language=pt',\n    source_updated_date: updated.updated || null,\n    latest_available_year: latestPeriod.year,\n    latest_available_month: latestPeriod.month,\n    latest_available_period: latestPeriod.period,\n    previous_period: previousPeriod.period,\n    same_month_previous_year: sameMonthPreviousYear.period,\n    lookback_months: HISTORY_MONTHS,\n    requested_lookback_months: HISTORY_MONTHS,\n    period_from: sixMonthStartPeriod.period,\n    period_to: latestPeriod.period,\n    state_country_windows: {\n      previous_year_tail: { from: previousYearTailFromPeriod, to: previousYearTailToPeriod },\n      current_year: { from: currentYearFromPeriod, to: latestPeriod.period },\n    },\n    transport_windows: {\n      previous_year_tail: { from: previousYearTailFromPeriod, to: previousYearTailToPeriod },\n      current_year: { from: currentYearFromPeriod, to: latestPeriod.period },\n    },\n    ncm_groups: ncmGroups,\n    ncm_codes: ncmCodes,\n    state_country_current_request: stateCountryCurrentRequest,\n    state_country_previous_request: stateCountryPreviousRequest,\n    transport_current_request: transportCurrentRequest,\n    transport_previous_request: transportPreviousRequest,\n    // Backward-compatible aliases used in previous parser versions.\n    state_series_request: stateCountryCurrentRequest,\n    destination_series_request: stateCountryCurrentRequest,\n    transport_series_request: transportCurrentRequest,\n  },\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        0
+      ],
+      "id": "comex-build-query-params-node",
+      "name": "Comex Build Query Params"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api-comexstat.mdic.gov.br/general?language=pt",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $('Comex Build Query Params').item.json.state_country_current_request }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 12000
+            }
+          },
+          "allowUnauthorizedCerts": true,
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1560,
+        0
+      ],
+      "id": "comex-state-series-node",
+      "name": "Comex Fetch State Series Window",
+      "retryOnFail": true,
+      "maxTries": 6,
+      "waitBetweenTries": 20000
+    },
+    {
+      "parameters": {
+        "jsCode": "function getCollectedPeriod(isoTs, cadenza) {\n  const d = new Date(isoTs || new Date().toISOString());\n  const pad = n => String(n).padStart(2, '0');\n  const yyyy = d.getUTCFullYear();\n  const mm = pad(d.getUTCMonth() + 1);\n  const dd = pad(d.getUTCDate());\n  const hh = pad(d.getUTCHours());\n  const doy = Math.floor((d - new Date(Date.UTC(yyyy,0,1))) / 86400000);\n  const week = pad(Math.ceil((doy + new Date(Date.UTC(yyyy,0,1)).getUTCDay() + 1) / 7));\n  switch((cadenza||'').toLowerCase()) {\n    case 'hourly':  return `${yyyy}-${mm}-${dd}T${hh}`;\n    case 'daily':   return `${yyyy}-${mm}-${dd}`;\n    case 'weekly':  return `${yyyy}-W${week}`;\n    case 'monthly': return `${yyyy}-${mm}`;\n    default:        return `${yyyy}-${mm}-${dd}`;\n  }\n}\nconst now = new Date().toISOString();\nconst _collectedPeriod = getCollectedPeriod(now, 'monthly');\nconst expectedFreshnessHours = 24 * 35;\nconst isFresh = (new Date() - new Date(now)) / 3600000 < expectedFreshnessHours;\n\nconst meta = $('Comex Build Query Params').item.json;\nconst updatedResponse = $('Comex Updated Check').item.json;\n\nfunction getNodeJson(nodeName) {\n  try {\n    return $(nodeName).item.json;\n  } catch (e) {\n    return null;\n  }\n}\n\nconst stateResponses = [\n  getNodeJson('Comex Fetch State Series Previous Tail'),\n  getNodeJson('Comex Fetch State Series Window'),\n].filter(Boolean);\n\nconst transportResponses = [\n  getNodeJson('Comex Port Snapshot Previous Tail'),\n  getNodeJson('Comex Port Snapshot'),\n].filter(Boolean);\n\nconst GREEN_CODES = new Set(meta.ncm_groups.green);\nconst ROASTED_CODES = new Set(meta.ncm_groups.roasted);\nconst SOLUBLE_CODES = new Set(meta.ncm_groups.soluble);\nconst LOOKBACK_MONTHS = Math.max(1, Number(meta.lookback_months || 6));\n\nfunction round(value, decimals = 4) {\n  if (value === null || value === undefined || Number.isNaN(value)) return null;\n  return Number(Number(value).toFixed(decimals));\n}\n\nfunction pad(value) {\n  return String(value).padStart(2, '0');\n}\n\nfunction shiftPeriod(period, offsetMonths) {\n  const match = String(period || '').match(/^(\\d{4})-(\\d{2})$/);\n  if (!match) return null;\n  const year = Number(match[1]);\n  const month = Number(match[2]);\n  const date = new Date(Date.UTC(year, month - 1 + offsetMonths, 1));\n  return date.getUTCFullYear() + '-' + pad(date.getUTCMonth() + 1);\n}\n\nfunction extractRows(payload) {\n  if (Array.isArray(payload)) return payload;\n  if (payload && payload.data && Array.isArray(payload.data.list)) return payload.data.list;\n  if (payload && payload.data && Array.isArray(payload.data)) return payload.data;\n  if (payload && Array.isArray(payload.list)) return payload.list;\n  return [];\n}\n\nfunction normalizeText(value) {\n  return String(value ?? '').trim();\n}\n\nfunction normalizeStateKey(value) {\n  return normalizeText(value)\n    .normalize('NFD')\n    .replace(/[\\u0300-\\u036f]/g, '')\n    .toLowerCase();\n}\n\nfunction toNumber(value, decimals = 4) {\n  if (value === null || value === undefined || value === '') return null;\n  if (typeof value === 'number') return Number.isFinite(value) ? round(value, decimals) : null;\n  const raw = normalizeText(value);\n  if (!raw) return null;\n  const cleaned = raw.includes(',')\n    ? raw.replace(/\\./g, '').replace(',', '.')\n    : raw;\n  const numeric = Number(cleaned);\n  return Number.isNaN(numeric) ? null : round(numeric, decimals);\n}\n\nfunction pctChange(current, previous, decimals = 4) {\n  if (current === null || previous === null || previous === 0) return null;\n  return round(((current - previous) / previous) * 100, decimals);\n}\n\nfunction sharePct(part, total, decimals = 4) {\n  if (part === null || total === null || total === 0) return null;\n  return round((part / total) * 100, decimals);\n}\n\nfunction sharePpChange(current, previous, decimals = 4) {\n  if (current === null || previous === null) return null;\n  return round(current - previous, decimals);\n}\n\nfunction formatNumber(value, decimals = 2) {\n  return value === null ? 'n/a' : Number(value).toFixed(decimals);\n}\n\nfunction extractNcmCode(value) {\n  const raw = normalizeText(value);\n  if (!raw) return null;\n  const match = raw.match(/\\b(\\d{8})\\b/);\n  if (match) return match[1];\n  const digits = raw.replace(/\\D/g, '');\n  if (digits.length === 8) return digits;\n  return null;\n}\n\nfunction classifyProductGroup(ncmCode) {\n  if (!ncmCode) return 'unknown';\n  if (GREEN_CODES.has(ncmCode) || /^090111|^090112/.test(ncmCode)) return 'green';\n  if (ROASTED_CODES.has(ncmCode) || /^090121|^090122/.test(ncmCode)) return 'roasted';\n  if (SOLUBLE_CODES.has(ncmCode) || /^210111|^210112/.test(ncmCode)) return 'soluble';\n  return 'unknown';\n}\n\nfunction buildEmptyMetricBucket() {\n  return {\n    fob_usd: 0,\n    kg: 0,\n    statistic_qty: 0,\n  };\n}\n\nfunction getMetricBucket(container, key) {\n  if (!container[key]) container[key] = buildEmptyMetricBucket();\n  return container[key];\n}\n\nfunction addMetrics(bucket, row) {\n  bucket.fob_usd += row.metric_fob_usd || 0;\n  bucket.kg += row.metric_kg || 0;\n  bucket.statistic_qty += row.metric_statistic || 0;\n}\n\nfunction finalizeBucket(bucket, totalFob, totalKg) {\n  return {\n    fob_usd: round(bucket.fob_usd, 2),\n    kg: round(bucket.kg, 2),\n    statistic_qty: round(bucket.statistic_qty, 2),\n    share_fob_pct: sharePct(bucket.fob_usd, totalFob, 4),\n    share_kg_pct: sharePct(bucket.kg, totalKg, 4),\n  };\n}\n\nfunction avgPrice(fob, kg) {\n  if (fob === null || kg === null || kg === 0) return null;\n  return round(fob / kg, 6);\n}\n\nfunction sortPeriods(a, b) {\n  return a.localeCompare(b);\n}\n\nfunction dedupeRows(rows, makeKey) {\n  const seen = new Set();\n  const output = [];\n  for (const row of rows) {\n    const key = makeKey(row);\n    if (seen.has(key)) continue;\n    seen.add(key);\n    output.push(row);\n  }\n  return output;\n}\n\nfunction normalizeRow(row, kind) {\n  const year = Number(row.year);\n  const month = Number(row.monthNumber || meta.latest_available_month);\n  if (!Number.isInteger(year) || !Number.isInteger(month)) return null;\n  const period = year + '-' + pad(month);\n  const ncmCode = extractNcmCode(row.coNcm || row.ncmCode || row.ncm || '');\n\n  return {\n    kind,\n    year,\n    month,\n    period,\n    state: normalizeText(row.federativeUnit || row.state || row.stateName || ''),\n    state_key: normalizeStateKey(row.federativeUnit || row.state || row.stateName || ''),\n    country: normalizeText(row.country || row.countryName || ''),\n    via: normalizeText(row.via || row.transportMode || ''),\n    ncm_raw: normalizeText(row.coNcm || row.ncm || row.ncmCode || ''),\n    ncm_code: ncmCode,\n    product_group: classifyProductGroup(ncmCode),\n    metric_fob_usd: toNumber(row.metricFOB, 2) || 0,\n    metric_kg: toNumber(row.metricKG, 2) || 0,\n    metric_statistic: toNumber(row.metricStatistic, 2) || 0,\n  };\n}\n\nconst rawStateRows = dedupeRows(\n  stateResponses\n    .flatMap((response) => extractRows(response))\n    .map((row) => normalizeRow(row, 'state_country'))\n    .filter(Boolean),\n  (row) => [row.period, row.state_key, row.country, row.ncm_code, row.metric_fob_usd, row.metric_kg, row.metric_statistic].join('|'),\n);\n\nconst rawPortRows = dedupeRows(\n  transportResponses\n    .flatMap((response) => extractRows(response))\n    .map((row) => normalizeRow(row, 'transport'))\n    .filter(Boolean),\n  (row) => [row.period, row.via, row.ncm_code, row.metric_fob_usd, row.metric_kg, row.metric_statistic].join('|'),\n);\n\nif (!rawStateRows.length) {\n  const debugCounts = stateResponses.map((response, index) => `resp${index}:${extractRows(response).length}`).join(',');\n  throw new Error(`Comex State Series empty. details=${JSON.stringify(meta.state_country_current_request ? meta.state_country_current_request.details : [])} responses=${debugCounts}`);\n}\n\nconst periodMap = new Map();\nfor (const row of rawStateRows) {\n  const periodEntry = periodMap.get(row.period) || {\n    period: row.period,\n    year: row.year,\n    month: row.month,\n    total_exports_fob_usd: 0,\n    total_exports_kg: 0,\n    total_exports_statistic_qty: 0,\n    by_group: {},\n    by_state: new Map(),\n  };\n\n  periodEntry.total_exports_fob_usd += row.metric_fob_usd;\n  periodEntry.total_exports_kg += row.metric_kg;\n  periodEntry.total_exports_statistic_qty += row.metric_statistic;\n  addMetrics(getMetricBucket(periodEntry.by_group, row.product_group), row);\n\n  if (row.state_key) {\n    const stateEntry = periodEntry.by_state.get(row.state_key) || {\n      state: row.state,\n      bucket: buildEmptyMetricBucket(),\n    };\n    addMetrics(stateEntry.bucket, row);\n    periodEntry.by_state.set(row.state_key, stateEntry);\n  }\n\n  periodMap.set(row.period, periodEntry);\n}\n\nconst allPeriods = Array.from(periodMap.keys()).sort(sortPeriods);\nconst analysisPeriods = allPeriods.slice(-LOOKBACK_MONTHS);\nif (!analysisPeriods.length) {\n  throw new Error('Comex parser could not find any usable period in state series');\n}\n\nconst analysisPeriodSet = new Set(analysisPeriods);\nconst latestPeriod = analysisPeriods[analysisPeriods.length - 1];\nconst previousPeriod = analysisPeriods.length > 1 ? analysisPeriods[analysisPeriods.length - 2] : shiftPeriod(latestPeriod, -1);\nconst yoyPeriod = shiftPeriod(latestPeriod, -12);\n\nconst latestAgg = periodMap.get(latestPeriod) || null;\nconst previousAgg = previousPeriod ? periodMap.get(previousPeriod) || null : null;\nconst yoyAgg = yoyPeriod ? periodMap.get(yoyPeriod) || null : null;\n\nif (!latestAgg) throw new Error('Comex parser could not find latest period in state series');\n\nfunction finalizePeriod(entry) {\n  if (!entry) return null;\n  const productMix = {\n    green: finalizeBucket(getMetricBucket(entry.by_group, 'green'), entry.total_exports_fob_usd, entry.total_exports_kg),\n    roasted: finalizeBucket(getMetricBucket(entry.by_group, 'roasted'), entry.total_exports_fob_usd, entry.total_exports_kg),\n    soluble: finalizeBucket(getMetricBucket(entry.by_group, 'soluble'), entry.total_exports_fob_usd, entry.total_exports_kg),\n    unknown: finalizeBucket(getMetricBucket(entry.by_group, 'unknown'), entry.total_exports_fob_usd, entry.total_exports_kg),\n  };\n\n  return {\n    period: entry.period,\n    total_exports_fob_usd: round(entry.total_exports_fob_usd, 2),\n    total_exports_kg: round(entry.total_exports_kg, 2),\n    total_exports_statistic_qty: round(entry.total_exports_statistic_qty, 2),\n    avg_fob_usd_per_kg: avgPrice(entry.total_exports_fob_usd, entry.total_exports_kg),\n    product_mix: productMix,\n  };\n}\n\nconst latestFinal = finalizePeriod(latestAgg);\nconst previousFinal = finalizePeriod(previousAgg);\nconst yoyFinal = finalizePeriod(yoyAgg);\n\nconst analysisTotalFob = analysisPeriods.reduce((sum, period) => sum + ((periodMap.get(period) || {}).total_exports_fob_usd || 0), 0);\nconst analysisTotalKg = analysisPeriods.reduce((sum, period) => sum + ((periodMap.get(period) || {}).total_exports_kg || 0), 0);\n\n// Top 3 Brazilian states over the analysis window\nconst stateTotals = new Map();\nfor (const row of rawStateRows) {\n  if (!analysisPeriodSet.has(row.period) || !row.state_key) continue;\n  const stateEntry = stateTotals.get(row.state_key) || {\n    key: row.state_key,\n    state: row.state || 'Unknown',\n    bucket: buildEmptyMetricBucket(),\n  };\n  addMetrics(stateEntry.bucket, row);\n  stateTotals.set(row.state_key, stateEntry);\n}\n\nlet top3States = Array.from(stateTotals.values())\n  .sort((a, b) => (b.bucket.fob_usd || 0) - (a.bucket.fob_usd || 0))\n  .slice(0, 3)\n  .map((entry) => ({\n    key: entry.key,\n    state: entry.state,\n    fob_usd: round(entry.bucket.fob_usd, 2),\n    kg: round(entry.bucket.kg, 2),\n    statistic_qty: round(entry.bucket.statistic_qty, 2),\n    share_fob_pct: sharePct(entry.bucket.fob_usd, analysisTotalFob, 4),\n    share_kg_pct: sharePct(entry.bucket.kg, analysisTotalKg, 4),\n  }));\n\nif (!top3States.length) {\n  top3States = Array.from(latestAgg.by_state.entries())\n    .map(([key, entry]) => ({\n      key,\n      state: entry.state || 'Unknown',\n      fob_usd: round(entry.bucket.fob_usd, 2),\n      kg: round(entry.bucket.kg, 2),\n      statistic_qty: round(entry.bucket.statistic_qty, 2),\n      share_fob_pct: sharePct(entry.bucket.fob_usd, latestAgg.total_exports_fob_usd, 4),\n      share_kg_pct: sharePct(entry.bucket.kg, latestAgg.total_exports_kg, 4),\n    }))\n    .sort((a, b) => (b.fob_usd || 0) - (a.fob_usd || 0))\n    .slice(0, 3);\n}\n\nconst focusStates = top3States.map((stateRef) => {\n  const stateEntry = latestAgg.by_state.get(stateRef.key);\n  const bucket = stateEntry ? stateEntry.bucket : buildEmptyMetricBucket();\n  return {\n    state: stateRef.state,\n    fob_usd: round(bucket.fob_usd, 2),\n    kg: round(bucket.kg, 2),\n    statistic_qty: round(bucket.statistic_qty, 2),\n    share_fob_pct: sharePct(bucket.fob_usd, latestAgg.total_exports_fob_usd, 4),\n    share_kg_pct: sharePct(bucket.kg, latestAgg.total_exports_kg, 4),\n  };\n});\n\nconst stateSeriesTop3 = analysisPeriods.map((period) => {\n  const periodEntry = periodMap.get(period);\n  const states = top3States.map((stateRef) => {\n    const stateEntry = periodEntry && periodEntry.by_state ? periodEntry.by_state.get(stateRef.key) : null;\n    const bucket = stateEntry ? stateEntry.bucket : buildEmptyMetricBucket();\n    return {\n      state: stateRef.state,\n      fob_usd: round(bucket.fob_usd, 2),\n      kg: round(bucket.kg, 2),\n      statistic_qty: round(bucket.statistic_qty, 2),\n      share_fob_pct: sharePct(bucket.fob_usd, periodEntry ? periodEntry.total_exports_fob_usd : 0, 4),\n      share_kg_pct: sharePct(bucket.kg, periodEntry ? periodEntry.total_exports_kg : 0, 4),\n    };\n  });\n  return {\n    period,\n    total_fob_usd: round(periodEntry ? periodEntry.total_exports_fob_usd : 0, 2),\n    total_kg: round(periodEntry ? periodEntry.total_exports_kg : 0, 2),\n    states,\n  };\n});\n\nconst focusStatesFobTotal = focusStates.reduce((sum, row) => sum + (row.fob_usd || 0), 0);\nconst focusStatesKgTotal = focusStates.reduce((sum, row) => sum + (row.kg || 0), 0);\n\n// Top 10 destination countries over the analysis window\nconst destinationTotals = new Map();\nfor (const row of rawStateRows) {\n  if (!analysisPeriodSet.has(row.period)) continue;\n  const key = row.country || 'Unknown';\n  const destination = destinationTotals.get(key) || {\n    country: key,\n    bucket: buildEmptyMetricBucket(),\n  };\n  addMetrics(destination.bucket, row);\n  destinationTotals.set(key, destination);\n}\n\nconst topDestinations = Array.from(destinationTotals.values())\n  .map((entry) => ({\n    country: entry.country,\n    fob_usd: round(entry.bucket.fob_usd, 2),\n    kg: round(entry.bucket.kg, 2),\n    statistic_qty: round(entry.bucket.statistic_qty, 2),\n    share_fob_pct: sharePct(entry.bucket.fob_usd, analysisTotalFob, 4),\n    share_kg_pct: sharePct(entry.bucket.kg, analysisTotalKg, 4),\n  }))\n  .sort((a, b) => (b.fob_usd || 0) - (a.fob_usd || 0))\n  .slice(0, 10);\n\nconst topDestinationCountries = topDestinations.map((entry) => entry.country);\nconst topDestinationCountrySet = new Set(topDestinationCountries);\n\nconst destinationsSeries = analysisPeriods.map((period) => {\n  const periodRows = rawStateRows.filter((row) => row.period === period && row.country);\n  const periodFob = periodRows.reduce((sum, row) => sum + row.metric_fob_usd, 0);\n  const periodKg = periodRows.reduce((sum, row) => sum + row.metric_kg, 0);\n\n  const cMap = new Map();\n  for (const row of periodRows) {\n    if (!topDestinationCountrySet.has(row.country)) continue;\n    const countryEntry = cMap.get(row.country) || {\n      country: row.country,\n      bucket: buildEmptyMetricBucket(),\n    };\n    addMetrics(countryEntry.bucket, row);\n    cMap.set(row.country, countryEntry);\n  }\n\n  const topCountries = topDestinationCountries.map((country) => {\n    const entry = cMap.get(country);\n    const bucket = entry ? entry.bucket : buildEmptyMetricBucket();\n    return {\n      country,\n      fob_usd: round(bucket.fob_usd, 2),\n      kg: round(bucket.kg, 2),\n      share_fob_pct: sharePct(bucket.fob_usd, periodFob, 4),\n      share_kg_pct: sharePct(bucket.kg, periodKg, 4),\n    };\n  });\n\n  return {\n    period,\n    total_fob_usd: round(periodFob, 2),\n    total_kg: round(periodKg, 2),\n    top_countries: topCountries,\n  };\n});\n\n// Transport modes (via) over the analysis window\nconst transportSeries = analysisPeriods.map((period) => {\n  const periodRows = rawPortRows.filter((row) => row.period === period);\n  const periodFob = periodRows.reduce((sum, row) => sum + row.metric_fob_usd, 0);\n  const periodKg = periodRows.reduce((sum, row) => sum + row.metric_kg, 0);\n\n  const viaMap = new Map();\n  for (const row of periodRows) {\n    const key = row.via || 'Unknown';\n    const viaEntry = viaMap.get(key) || { via: key, bucket: buildEmptyMetricBucket() };\n    addMetrics(viaEntry.bucket, row);\n    viaMap.set(key, viaEntry);\n  }\n\n  const breakdown = Array.from(viaMap.values())\n    .map((entry) => ({\n      via: entry.via,\n      fob_usd: round(entry.bucket.fob_usd, 2),\n      kg: round(entry.bucket.kg, 2),\n      share_fob_pct: sharePct(entry.bucket.fob_usd, periodFob, 4),\n      share_kg_pct: sharePct(entry.bucket.kg, periodKg, 4),\n    }))\n    .sort((a, b) => (b.fob_usd || 0) - (a.fob_usd || 0));\n\n  return {\n    period,\n    total_fob_usd: round(periodFob, 2),\n    total_kg: round(periodKg, 2),\n    breakdown,\n  };\n});\n\nconst latestTransportBreakdown = transportSeries.find((entry) => entry.period === latestPeriod)?.breakdown || [];\nconst transportModesLatest = latestTransportBreakdown.slice(0, 10);\nconst topPorts = transportModesLatest.map((entry) => ({\n  port: entry.via,\n  fob_usd: entry.fob_usd,\n  kg: entry.kg,\n  share_fob_pct: entry.share_fob_pct,\n  share_kg_pct: entry.share_kg_pct,\n}));\nconst portDataAvailable = topPorts.length > 0;\n\nconst recentSeries = analysisPeriods.map((period) => {\n  const entry = periodMap.get(period);\n  const finalized = finalizePeriod(entry);\n  return {\n    period: finalized.period,\n    total_exports_fob_usd: finalized.total_exports_fob_usd,\n    total_exports_kg: finalized.total_exports_kg,\n    total_exports_statistic_qty: finalized.total_exports_statistic_qty,\n    avg_fob_usd_per_kg: finalized.avg_fob_usd_per_kg,\n    green_share_kg_pct: finalized.product_mix.green.share_kg_pct,\n    roasted_share_kg_pct: finalized.product_mix.roasted.share_kg_pct,\n    soluble_share_kg_pct: finalized.product_mix.soluble.share_kg_pct,\n  };\n});\n\nconst momExportsKgPct = previousFinal ? pctChange(latestFinal.total_exports_kg, previousFinal.total_exports_kg) : null;\nconst momExportsFobPct = previousFinal ? pctChange(latestFinal.total_exports_fob_usd, previousFinal.total_exports_fob_usd) : null;\nconst yoyExportsKgPct = yoyFinal ? pctChange(latestFinal.total_exports_kg, yoyFinal.total_exports_kg) : null;\nconst yoyExportsFobPct = yoyFinal ? pctChange(latestFinal.total_exports_fob_usd, yoyFinal.total_exports_fob_usd) : null;\nconst avgPriceMomPct = previousFinal ? pctChange(latestFinal.avg_fob_usd_per_kg, previousFinal.avg_fob_usd_per_kg) : null;\nconst avgPriceYoYPct = yoyFinal ? pctChange(latestFinal.avg_fob_usd_per_kg, yoyFinal.avg_fob_usd_per_kg) : null;\nconst greenShareChangePpYoY = yoyFinal ? sharePpChange(latestFinal.product_mix.green.share_kg_pct, yoyFinal.product_mix.green.share_kg_pct) : null;\nconst roastedShareChangePpYoY = yoyFinal ? sharePpChange(latestFinal.product_mix.roasted.share_kg_pct, yoyFinal.product_mix.roasted.share_kg_pct) : null;\nconst solubleShareChangePpYoY = yoyFinal ? sharePpChange(latestFinal.product_mix.soluble.share_kg_pct, yoyFinal.product_mix.soluble.share_kg_pct) : null;\n\nconst topDestinationSharePct = topDestinations.length ? topDestinations[0].share_fob_pct : null;\nconst top3DestinationsFob = topDestinations.slice(0, 3).reduce((sum, row) => sum + (row.fob_usd || 0), 0);\nconst top3DestinationsSharePct = sharePct(top3DestinationsFob, analysisTotalFob, 4);\n\nconst focusStatesShareKgPct = sharePct(focusStatesKgTotal, latestAgg.total_exports_kg, 4);\nconst focusStatesShareFobPct = sharePct(focusStatesFobTotal, latestAgg.total_exports_fob_usd, 4);\n\nconst signals = [];\nif (yoyExportsKgPct !== null && yoyExportsKgPct >= 10) signals.push('export_volume_yoy_up');\nif (yoyExportsKgPct !== null && yoyExportsKgPct <= -10) signals.push('export_volume_yoy_down');\nif (yoyExportsFobPct !== null && yoyExportsFobPct >= 10) signals.push('export_value_yoy_up');\nif (yoyExportsFobPct !== null && yoyExportsFobPct <= -10) signals.push('export_value_yoy_down');\nif (avgPriceYoYPct !== null && avgPriceYoYPct >= 10) signals.push('average_export_price_rising');\nif (avgPriceYoYPct !== null && avgPriceYoYPct <= -10) signals.push('average_export_price_falling');\nif (solubleShareChangePpYoY !== null && solubleShareChangePpYoY >= 3) signals.push('soluble_share_rising');\nif (roastedShareChangePpYoY !== null && roastedShareChangePpYoY >= 2) signals.push('roasted_share_rising');\nif (top3DestinationsSharePct !== null && top3DestinationsSharePct >= 60) signals.push('destination_concentration_high');\nif (focusStatesShareKgPct !== null && focusStatesShareKgPct >= 70) signals.push('state_concentration_high');\nif (yoyExportsFobPct !== null && yoyExportsFobPct >= 10 && yoyExportsKgPct !== null && Math.abs(yoyExportsKgPct) < 5) signals.push('export_value_up_volume_flat');\n\nlet movementLabel = 'mixed';\nif (\n  (solubleShareChangePpYoY !== null && solubleShareChangePpYoY >= 3) ||\n  (roastedShareChangePpYoY !== null && roastedShareChangePpYoY >= 2) ||\n  (greenShareChangePpYoY !== null && greenShareChangePpYoY <= -3)\n) {\n  movementLabel = 'mix_shift';\n} else if ((yoyExportsKgPct !== null && yoyExportsKgPct >= 10) || (momExportsKgPct !== null && momExportsKgPct >= 10)) {\n  movementLabel = 'export_pressure_rising';\n} else if ((yoyExportsKgPct !== null && yoyExportsKgPct <= -10) || (momExportsKgPct !== null && momExportsKgPct <= -10)) {\n  movementLabel = 'export_pressure_easing';\n}\n\nconst dominantGroup = ['green', 'roasted', 'soluble', 'unknown']\n  .map((group) => ({\n    group,\n    share: latestFinal.product_mix[group].share_kg_pct || 0,\n  }))\n  .sort((a, b) => b.share - a.share)[0];\n\nlet summaryEn = 'Comex Stat latest export month ' + latestFinal.period + ' shows ' + formatNumber(latestFinal.total_exports_kg, 2) + ' kg and ' + formatNumber(latestFinal.total_exports_fob_usd, 2) + ' USD FOB for Brazilian coffee exports.';\nif (dominantGroup && dominantGroup.group !== 'unknown') {\n  summaryEn += ' Product mix remained led by ' + dominantGroup.group + ' coffee at ' + formatNumber(dominantGroup.share, 2) + '% of exported volume.';\n}\nif (top3States.length) {\n  summaryEn += ' Top exporting states over the last ' + analysisPeriods.length + ' months: ' + top3States.map((entry) => entry.state).join(', ') + '.';\n}\nif (topDestinations.length) {\n  summaryEn += ' Top destination over the same window was ' + topDestinations[0].country + '.';\n}\n\nreturn [{\n  json: {\n    source: 'COMEX_STAT',\n    source_format: 'json_api',\n    source_base_url: meta.source_base_url,\n    source_url: meta.source_url || (meta.source_base_url + '/general?language=pt'),\n    source_updated_date: meta.source_updated_date,\n    country: 'BR',\n    macroarea: 'colture',\n    flow: 'export',\n    collected_at: now,\n    collected_period: _collectedPeriod,\n        is_fresh: isFresh,\n    updated_reference: {\n      updated: meta.source_updated_date,\n      year: meta.latest_available_year,\n      month: meta.latest_available_month,\n      period: meta.latest_available_period,\n      state_series_period: latestPeriod,\n    },\n    lookback_months: analysisPeriods.length,\n    requested_lookback_months: meta.requested_lookback_months || LOOKBACK_MONTHS,\n    ncm_codes: meta.ncm_codes,\n    ncm_groups: meta.ncm_groups,\n    latest_month: {\n      period: latestFinal.period,\n      total_exports_fob_usd: latestFinal.total_exports_fob_usd,\n      total_exports_kg: latestFinal.total_exports_kg,\n      total_exports_statistic_qty: latestFinal.total_exports_statistic_qty,\n      avg_fob_usd_per_kg: latestFinal.avg_fob_usd_per_kg,\n    },\n    previous_month: previousFinal ? {\n      period: previousFinal.period,\n      total_exports_fob_usd: previousFinal.total_exports_fob_usd,\n      total_exports_kg: previousFinal.total_exports_kg,\n      total_exports_statistic_qty: previousFinal.total_exports_statistic_qty,\n      avg_fob_usd_per_kg: previousFinal.avg_fob_usd_per_kg,\n    } : null,\n    same_month_previous_year: yoyFinal ? {\n      period: yoyFinal.period,\n      total_exports_fob_usd: yoyFinal.total_exports_fob_usd,\n      total_exports_kg: yoyFinal.total_exports_kg,\n      total_exports_statistic_qty: yoyFinal.total_exports_statistic_qty,\n      avg_fob_usd_per_kg: yoyFinal.avg_fob_usd_per_kg,\n    } : null,\n    product_mix: {\n      green: latestFinal.product_mix.green,\n      roasted: latestFinal.product_mix.roasted,\n      soluble: latestFinal.product_mix.soluble,\n    },\n    top_3_states: top3States.map((entry) => ({\n      state: entry.state,\n      fob_usd: entry.fob_usd,\n      kg: entry.kg,\n      statistic_qty: entry.statistic_qty,\n      share_fob_pct: entry.share_fob_pct,\n      share_kg_pct: entry.share_kg_pct,\n    })),\n    state_series_top_3: stateSeriesTop3,\n    focus_states: focusStates,\n    top_destinations: topDestinations,\n    derived_metrics: {\n      mom_exports_kg_pct: momExportsKgPct,\n      mom_exports_fob_pct: momExportsFobPct,\n      yoy_exports_kg_pct: yoyExportsKgPct,\n      yoy_exports_fob_pct: yoyExportsFobPct,\n      avg_price_mom_pct: avgPriceMomPct,\n      avg_price_yoy_pct: avgPriceYoYPct,\n      green_share_change_pp_yoy: greenShareChangePpYoY,\n      roasted_share_change_pp_yoy: roastedShareChangePpYoY,\n      soluble_share_change_pp_yoy: solubleShareChangePpYoY,\n      top_destination_share_pct: topDestinationSharePct,\n      top_3_destinations_share_pct: top3DestinationsSharePct,\n      focus_states_share_fob_pct: focusStatesShareFobPct,\n      focus_states_share_kg_pct: focusStatesShareKgPct,\n    },\n    movement_label: movementLabel,    signals: Array.from(new Set(signals)),\n    summary_en: summaryEn,\n    recent_series: recentSeries,\n    destinations_series: destinationsSeries,\n    transport_series: transportSeries,\n    transport_modes_latest: transportModesLatest,\n    top_ports: topPorts,\n    port_data_available: portDataAvailable,\n    _chart_fields: ['recent_series', 'state_series_top_3', 'destinations_series', 'transport_series'],\n  },\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3380,
+        0
+      ],
+      "id": "comex-parse-node",
+      "name": "Comex Parse"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ JSON.stringify({ context: { updated_reference: $json.updated_reference, lookback_months: $json.lookback_months, latest_month: $json.latest_month, previous_month: $json.previous_month, same_month_previous_year: $json.same_month_previous_year }, signal_vector_numeric: { derived_metrics: $json.derived_metrics, product_mix_latest: { green_share_kg_pct: $json.product_mix?.green?.share_kg_pct ?? null, roasted_share_kg_pct: $json.product_mix?.roasted?.share_kg_pct ?? null, soluble_share_kg_pct: $json.product_mix?.soluble?.share_kg_pct ?? null, green_share_fob_pct: $json.product_mix?.green?.share_fob_pct ?? null, roasted_share_fob_pct: $json.product_mix?.roasted?.share_fob_pct ?? null, soluble_share_fob_pct: $json.product_mix?.soluble?.share_fob_pct ?? null }, top_states_latest: ($json.top_3_states || []).slice(0, 3).map((s) => ({ state: s.state, share_kg_pct: s.share_kg_pct, share_fob_pct: s.share_fob_pct })), top_destinations_latest: ($json.top_destinations || []).slice(0, 5).map((d) => ({ country: d.country, share_kg_pct: d.share_kg_pct, share_fob_pct: d.share_fob_pct })), transport_modes_latest: ($json.transport_modes_latest || []).slice(0, 4).map((v) => ({ via: v.via, share_kg_pct: v.share_kg_pct, share_fob_pct: v.share_fob_pct })), last_3_months_totals: ($json.recent_series || []).slice(-3).map((r) => ({ period: r.period, total_exports_kg: r.total_exports_kg, total_exports_fob_usd: r.total_exports_fob_usd, avg_fob_usd_per_kg: r.avg_fob_usd_per_kg })) }, rule_based_baseline: { movement_label: $json.movement_label, signals: $json.signals, summary_en: $json.summary_en } }, null, 2) }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are a senior trade-intelligence analyst for a Lavazza coffee export monitoring workflow. You receive an already-aggregated signal vector from Comex Stat, so do not reconstruct raw tables.\n\nGoal:\n- produce a concrete high-level view of recent export dynamics\n- transform numeric changes into actionable textual signals\n- highlight direction, magnitude, and concentration/mix effects\n\nOutput format:\n{\n  \"movement_label\": \"export_pressure_rising|export_pressure_easing|mix_shift|mixed\",\n  \"signals\": [\"...\"],\n  \"summary_en\": \"...\"\n}\n\nRules:\n- use only provided data\n- do not repeat the input; synthesize it\n- signals must be concrete and metric-driven, each with metric + direction + magnitude + implication\n- max 7 signals, short and specific\n- skip metrics that are null or not informative\n- movement_label = mix_shift when composition change (green/roasted/soluble) is the dominant story\n- use export_pressure_rising/export_pressure_easing only when volume/value direction is clear; otherwise use mixed\n- summary_en max 2 sentences, decision-oriented\n- return valid JSON only, no markdown and no extra text."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        3640,
+        0
+      ],
+      "id": "comex-ai-signals-chain-node",
+      "name": "Comex AI Signals",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {
+          "maxRetries": 2
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        3640,
+        240
+      ],
+      "id": "comex-openai-signals-node",
+      "name": "Comex OpenAI Signals Model",
+      "retryOnFail": true,
+      "credentials": {
+        "openAiApi": {
+          "id": "0Vum5STk59lUOybm",
+          "name": "OpenAi account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = ($json.text || '').trim();\nconst cleaned = raw\n  .replace(/^```json\\\\s*/i, '')\n  .replace(/^```\\\\s*/i, '')\n  .replace(/```$/i, '')\n  .trim();\nconst parsed = JSON.parse(cleaned);\nconst base = $('Comex Parse').item.json;\n\nfunction numberOrZero(value) {\n  if (value === null || value === undefined || Number.isNaN(value)) return 0;\n  return value;\n}\n\nfunction sanitizeDerivedMetrics(metrics) {\n  const source = metrics || {};\n  return {\n    mom_exports_kg_pct: numberOrZero(source.mom_exports_kg_pct),\n    mom_exports_fob_pct: numberOrZero(source.mom_exports_fob_pct),\n    yoy_exports_kg_pct: numberOrZero(source.yoy_exports_kg_pct),\n    yoy_exports_fob_pct: numberOrZero(source.yoy_exports_fob_pct),\n    avg_price_mom_pct: numberOrZero(source.avg_price_mom_pct),\n    avg_price_yoy_pct: numberOrZero(source.avg_price_yoy_pct),\n    green_share_change_pp_yoy: numberOrZero(source.green_share_change_pp_yoy),\n    roasted_share_change_pp_yoy: numberOrZero(source.roasted_share_change_pp_yoy),\n    soluble_share_change_pp_yoy: numberOrZero(source.soluble_share_change_pp_yoy),\n    top_destination_share_pct: numberOrZero(source.top_destination_share_pct),\n    top_3_destinations_share_pct: numberOrZero(source.top_3_destinations_share_pct),\n    focus_states_share_fob_pct: numberOrZero(source.focus_states_share_fob_pct),\n    focus_states_share_kg_pct: numberOrZero(source.focus_states_share_kg_pct),\n  };\n}\n\nconst output = {\n  ...base,\n  rule_based_signals: Array.isArray(base.signals) ? base.signals : [],\n  rule_based_movement_label: base.movement_label || 'mixed',\n  fallback_summary_en: base.summary_en || '',\n  movement_label: parsed.movement_label || base.movement_label || 'mixed',\n  signals: Array.isArray(parsed.signals) ? parsed.signals : (Array.isArray(base.signals) ? base.signals : []),\n  summary_en: parsed.summary_en || base.summary_en || '',\n};\n\noutput.derived_metrics = sanitizeDerivedMetrics(output.derived_metrics);\n\nreturn [{\n  json: output,\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3900,
+        0
+      ],
+      "id": "comex-parse-signals-node",
+      "name": "Comex Parse Signals"
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "raw_crops",
+        "fields": "source,source_format,source_base_url,source_url,source_updated_date,country,macroarea,flow,collected_at,updated_reference,lookback_months,requested_lookback_months,ncm_codes,ncm_groups,latest_month,previous_month,same_month_previous_year,product_mix,focus_states,top_3_states,state_series_top_3,top_destinations,destinations_series,transport_modes_latest,transport_series,top_ports,port_data_available,derived_metrics,movement_label,signals,summary_en,recent_series,_chart_fields",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        4160,
+        0
+      ],
+      "id": "comex-mongo-raw-crops-node",
+      "name": "Comex MongoDB raw_crops",
+      "credentials": {
+        "mongoDb": {
+          "id": "Jo4ZHZCY4HM8JRrD",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const now = new Date().toISOString();\nconst meta = $('Comex Parse Signals').item.json;\n\nreturn [{\n  json: {\n    source: 'COMEX_STAT',\n    country: 'BR',\n    macroarea: 'colture',\n    cadenza: 'monthly',\n    run_date: now,\n    status: 'done',\n    completed_at: now,\n    report_period: meta.updated_reference ? meta.updated_reference.period : null,\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4420,
+        0
+      ],
+      "id": "comex-build-log-node",
+      "name": "Comex Build Ingestion Log"
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "ingestion_log",
+        "fields": "source,country,macroarea,cadenza,run_date,status,completed_at",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        4680,
+        0
+      ],
+      "id": "comex-mongo-log-node",
+      "name": "Comex MongoDB ingestion_log",
+      "credentials": {
+        "mongoDb": {
+          "id": "Jo4ZHZCY4HM8JRrD",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const baseDelayMs = 12000;\nconst jitterMs = Math.floor(Math.random() * 2000);\nawait new Promise((resolve) => setTimeout(resolve, baseDelayMs + jitterMs));\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2340,
+        0
+      ],
+      "id": "comex-wait-node",
+      "name": "Comex Wait"
+    },
+    {
+      "parameters": {
+        "jsCode": "const baseDelayMs = 12000;\nconst jitterMs = Math.floor(Math.random() * 2000);\nawait new Promise((resolve) => setTimeout(resolve, baseDelayMs + jitterMs));\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        0
+      ],
+      "id": "comex-wait-pre-state-node",
+      "name": "Comex Wait Pre State"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api-comexstat.mdic.gov.br/general?language=pt",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $('Comex Build Query Params').item.json.transport_current_request }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 12000
+            }
+          },
+          "allowUnauthorizedCerts": true,
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2600,
+        0
+      ],
+      "id": "comex-port-snapshot-node",
+      "name": "Comex Port Snapshot",
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 12000
+    },
+    {
+      "parameters": {
+        "jsCode": "const baseDelayMs = 12000;\nconst jitterMs = Math.floor(Math.random() * 2000);\nawait new Promise((resolve) => setTimeout(resolve, baseDelayMs + jitterMs));\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1820,
+        0
+      ],
+      "id": "comex-wait-pre-state-tail-node",
+      "name": "Comex Wait Pre State Tail"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api-comexstat.mdic.gov.br/general?language=pt",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $('Comex Build Query Params').item.json.state_country_previous_request }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 12000
+            }
+          },
+          "allowUnauthorizedCerts": true,
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2080,
+        0
+      ],
+      "id": "comex-state-series-prev-tail-node",
+      "name": "Comex Fetch State Series Previous Tail",
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const baseDelayMs = 18000;\nconst jitterMs = Math.floor(Math.random() * 2000);\nawait new Promise((resolve) => setTimeout(resolve, baseDelayMs + jitterMs));\nreturn $input.all();"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2860,
+        0
+      ],
+      "id": "comex-wait-pre-port-tail-node",
+      "name": "Comex Wait Pre Port Tail"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api-comexstat.mdic.gov.br/general?language=pt",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $('Comex Build Query Params').item.json.transport_previous_request }}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 12000
+            }
+          },
+          "allowUnauthorizedCerts": true,
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3120,
+        0
+      ],
+      "id": "comex-port-snapshot-prev-tail-node",
+      "name": "Comex Port Snapshot Previous Tail",
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst err = item.json?.error ?? item.error?.message ?? '';\nconst statusCode = item.json?.statusCode ?? item.json?.status ?? 0;\nif (err || statusCode >= 400) {\n  return [{ json: {\n    _api_skip: true,\n    source: '01_COMEX',\n    country: 'BR',\n    status: 'skipped_api_error',\n    reason: `API unavailable: ${err || 'HTTP ' + statusCode}`,\n    run_date: new Date().toISOString(),\n    completed_at: new Date().toISOString()\n  } }];\n}\nreturn [{ json: item.json }];"
+      },
+      "id": "f00316ff-72c4-4566-8f4a-e07255a284f8",
+      "name": "API Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "75841ee4-2455-4300-a513-aaa97db91cdc",
+              "leftValue": "={{ $json._api_skip }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f549143a-571f-4eee-857e-66b902eca007",
+      "name": "API Skip?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b809f5a2-7336-4649-bd8f-d09b03c35ead",
+              "name": "workflow",
+              "value": "=01-comex",
+              "type": "string"
+            },
+            {
+              "id": "2a88b2aa-0b0d-48d7-94fd-96021cff5a3b",
+              "name": "status",
+              "value": "={{ $json.status || 'done' }}",
+              "type": "string"
+            },
+            {
+              "id": "71fafc30-a315-4f66-bedd-ed5f253992d7",
+              "name": "completed_at",
+              "value": "={{ new Date().toISOString() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "be5803e9-5d65-4437-b20b-dac4c3875033",
+      "name": "Return Status",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        4940,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -200
+      ],
+      "id": "execute-workflow-trigger-6b8xxkCb",
+      "name": "Execute Workflow Trigger"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Comex Updated Check": {
+      "main": [
+        [
+          {
+            "node": "API Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comex Build Query Params": {
+      "main": [
+        [
+          {
+            "node": "Comex Wait Pre State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comex Wait Pre State": {
+      "main": [
+        [
+          {
+            "node": "Comex Fetch State Series Window",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comex Parse": {
+      "main": [
+        [
+          {
+            "node": "Comex AI Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comex OpenAI Signals Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Comex AI Signals",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comex AI Signals": {
+      "main": [
+        [
+          {
+            "node": "Comex Parse Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comex Parse Signals": {
+      "main": [
+        [
+          {
+            "node": "Comex MongoDB raw_crops",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comex MongoDB raw_crops": {
+      "main": [
+        [
+          {
+            "node": "Comex Build Ingestion Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comex Build Ingestion Log": {
+      "main": [
+        [
+          {
+            "node": "Comex MongoDB ingestion_log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comex Wait": {
+      "main": [
+        [
+          {
+            "node": "Comex Port Snapshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comex Port Snapshot": {
+      "main": [
+        [
+          {
+            "node": "Comex Wait Pre Port Tail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comex Fetch State Series Window": {
+      "main": [
+        [
+          {
+            "node": "Comex Wait Pre State Tail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comex Wait Pre State Tail": {
+      "main": [
+        [
+          {
+            "node": "Comex Fetch State Series Previous Tail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comex Fetch State Series Previous Tail": {
+      "main": [
+        [
+          {
+            "node": "Comex Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comex Wait Pre Port Tail": {
+      "main": [
+        [
+          {
+            "node": "Comex Port Snapshot Previous Tail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comex Port Snapshot Previous Tail": {
+      "main": [
+        [
+          {
+            "node": "Comex Parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Comex Updated Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Comex Updated Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Check": {
+      "main": [
+        [
+          {
+            "node": "API Skip?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Skip?": {
+      "main": [
+        [
+          {
+            "node": "Comex MongoDB ingestion_log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Comex Build Query Params",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Comex MongoDB ingestion_log": {
+      "main": [
+        [
+          {
+            "node": "Return Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Comex Updated Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Return Status": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "5ab60b2b-ca68-485a-bb92-52dba2bda1e2",
+  "meta": {
+    "instanceId": "2be5d016e514bca7075b92e7e4319cc52b5ecaf9d38e791fac92ccc23d3d69ba"
+  },
+  "id": "6b8xxkCbjKolIAgc",
+  "tags": []
+}

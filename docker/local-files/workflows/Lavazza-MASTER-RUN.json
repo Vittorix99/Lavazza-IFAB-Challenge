@@ -1,0 +1,483 @@
+[
+  {
+    "id": "MASTER-RUN-LAVAZZA-001",
+    "name": "Lavazza - MASTER RUN (Demo)",
+    "nodes": [
+      {
+        "id": "a9b91447-e884-4a60-8dec-11f4d99111f2",
+        "name": "▶ AVVIA TUTTI",
+        "type": "n8n-nodes-base.manualTrigger",
+        "typeVersion": 1,
+        "position": [
+          -400,
+          300
+        ],
+        "parameters": {}
+      },
+      {
+        "id": "3c384132-e3c2-41f2-a77b-9d3fb947fe34",
+        "name": "Schedule Giornaliero",
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          -400,
+          500
+        ],
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "0 7 * * 1-5"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "1c43b3b9-d744-40d3-b084-7ae249c43936",
+        "name": "Run: BCB PTAX",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.1,
+        "position": [
+          0,
+          300
+        ],
+        "continueOnFail": true,
+        "parameters": {
+          "workflowId": {
+            "__rl": true,
+            "value": "joNcZFDedBFhi6ue",
+            "mode": "id"
+          },
+          "waitForSubWorkflow": true,
+          "options": {}
+        }
+      },
+      {
+        "id": "b722164c-bca7-45c1-8c20-b50ab0c87aee",
+        "name": "Run: ECB FX",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.1,
+        "position": [
+          280,
+          300
+        ],
+        "continueOnFail": true,
+        "parameters": {
+          "workflowId": {
+            "__rl": true,
+            "value": "C17pmMtR27ICovcS",
+            "mode": "id"
+          },
+          "waitForSubWorkflow": true,
+          "options": {}
+        }
+      },
+      {
+        "id": "d6914f23-bbe8-4099-a8f1-df8720e7f1ea",
+        "name": "Run: World Bank",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.1,
+        "position": [
+          560,
+          300
+        ],
+        "continueOnFail": true,
+        "parameters": {
+          "workflowId": {
+            "__rl": true,
+            "value": "MR9h5J37EPv0LvFU",
+            "mode": "id"
+          },
+          "waitForSubWorkflow": true,
+          "options": {}
+        }
+      },
+      {
+        "id": "3636c182-cfb6-4439-bfef-c3b3668fd295",
+        "name": "Run: NASA FIRMS",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.1,
+        "position": [
+          840,
+          300
+        ],
+        "continueOnFail": true,
+        "parameters": {
+          "workflowId": {
+            "__rl": true,
+            "value": "Ch0PCqki7uMgVBTQ",
+            "mode": "id"
+          },
+          "waitForSubWorkflow": true,
+          "options": {}
+        }
+      },
+      {
+        "id": "d82cf967-9dab-43e3-abde-26e6b12ecf44",
+        "name": "Run: NOAA ENSO",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.1,
+        "position": [
+          1120,
+          300
+        ],
+        "continueOnFail": true,
+        "parameters": {
+          "workflowId": {
+            "__rl": true,
+            "value": "aWb7nTZ8VjjdwP9Y",
+            "mode": "id"
+          },
+          "waitForSubWorkflow": true,
+          "options": {}
+        }
+      },
+      {
+        "id": "d32bf352-9e88-435f-bfaa-402311095b60",
+        "name": "Run: GDELT News",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.1,
+        "position": [
+          1400,
+          300
+        ],
+        "continueOnFail": true,
+        "parameters": {
+          "workflowId": {
+            "__rl": true,
+            "value": "udzCjAsrPBiiZ1IJ",
+            "mode": "id"
+          },
+          "waitForSubWorkflow": true,
+          "options": {}
+        }
+      },
+      {
+        "id": "9256559c-0883-4c60-b192-9696fe49db12",
+        "name": "Run: WTO News",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.1,
+        "position": [
+          1680,
+          300
+        ],
+        "continueOnFail": true,
+        "parameters": {
+          "workflowId": {
+            "__rl": true,
+            "value": "XVj94x5mVNC7PxnC",
+            "mode": "id"
+          },
+          "waitForSubWorkflow": true,
+          "options": {}
+        }
+      },
+      {
+        "id": "c6b09ed6-e809-4e49-bc15-51ad56833cc4",
+        "name": "Run: Port Congestion",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.1,
+        "position": [
+          1960,
+          300
+        ],
+        "continueOnFail": true,
+        "parameters": {
+          "workflowId": {
+            "__rl": true,
+            "value": "NSpu99gf4kPYOQVX",
+            "mode": "id"
+          },
+          "waitForSubWorkflow": true,
+          "options": {}
+        }
+      },
+      {
+        "id": "80066f8a-c0fc-4fb7-b52b-52e82aa3ddab",
+        "name": "Run: USDA PSD",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.1,
+        "position": [
+          2240,
+          300
+        ],
+        "continueOnFail": true,
+        "parameters": {
+          "workflowId": {
+            "__rl": true,
+            "value": "JSBq7atBa0isJaDR",
+            "mode": "id"
+          },
+          "waitForSubWorkflow": true,
+          "options": {}
+        }
+      },
+      {
+        "id": "d0ab114e-261a-42d7-aef5-a928985de04f",
+        "name": "Run: IBGE SIDRA",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.1,
+        "position": [
+          2520,
+          300
+        ],
+        "continueOnFail": true,
+        "parameters": {
+          "workflowId": {
+            "__rl": true,
+            "value": "2I8KER0mGOBdDLUi",
+            "mode": "id"
+          },
+          "waitForSubWorkflow": true,
+          "options": {}
+        }
+      },
+      {
+        "id": "f480f7fa-27f0-4cd0-9a75-6b004d70f77e",
+        "name": "Run: Comex Stat",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.1,
+        "position": [
+          2800,
+          300
+        ],
+        "continueOnFail": true,
+        "parameters": {
+          "workflowId": {
+            "__rl": true,
+            "value": "6b8xxkCbjKolIAgc",
+            "mode": "id"
+          },
+          "waitForSubWorkflow": true,
+          "options": {}
+        }
+      },
+      {
+        "id": "e9dc4b87-16b7-429c-a530-d608665b7857",
+        "name": "Run: CONAB PDF",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.1,
+        "position": [
+          3080,
+          300
+        ],
+        "continueOnFail": true,
+        "parameters": {
+          "workflowId": {
+            "__rl": true,
+            "value": "2CzBgXVDXajM9u3Z",
+            "mode": "id"
+          },
+          "waitForSubWorkflow": true,
+          "options": {}
+        }
+      },
+      {
+        "id": "e182f2d2-b84c-4289-884c-f66bad3025e3",
+        "name": "Run: FAOSTAT",
+        "type": "n8n-nodes-base.executeWorkflow",
+        "typeVersion": 1.1,
+        "position": [
+          3360,
+          300
+        ],
+        "continueOnFail": true,
+        "parameters": {
+          "workflowId": {
+            "__rl": true,
+            "value": "Nr0Nhjb6beu46ELX",
+            "mode": "id"
+          },
+          "waitForSubWorkflow": true,
+          "options": {}
+        }
+      },
+      {
+        "id": "72b486d7-32d3-4bb3-9d2b-7133bb7c621e",
+        "name": "✅ Ingestion Completata",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          3640,
+          300
+        ],
+        "parameters": {
+          "jsCode": "console.log('Ingestion completata: ' + new Date().toISOString());\nreturn [{ json: { status: 'done', completed_at: new Date().toISOString() } }];"
+        }
+      }
+    ],
+    "connections": {
+      "▶ AVVIA TUTTI": {
+        "main": [
+          [
+            {
+              "node": "Run: BCB PTAX",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Schedule Giornaliero": {
+        "main": [
+          [
+            {
+              "node": "Run: BCB PTAX",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Run: BCB PTAX": {
+        "main": [
+          [
+            {
+              "node": "Run: ECB FX",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Run: ECB FX": {
+        "main": [
+          [
+            {
+              "node": "Run: World Bank",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Run: World Bank": {
+        "main": [
+          [
+            {
+              "node": "Run: NASA FIRMS",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Run: NASA FIRMS": {
+        "main": [
+          [
+            {
+              "node": "Run: NOAA ENSO",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Run: NOAA ENSO": {
+        "main": [
+          [
+            {
+              "node": "Run: WTO News",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Run: GDELT News": {
+        "main": [
+          [
+            {
+              "node": "✅ Ingestion Completata",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Run: WTO News": {
+        "main": [
+          [
+            {
+              "node": "Run: Port Congestion",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Run: Port Congestion": {
+        "main": [
+          [
+            {
+              "node": "Run: USDA PSD",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Run: USDA PSD": {
+        "main": [
+          [
+            {
+              "node": "Run: IBGE SIDRA",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Run: IBGE SIDRA": {
+        "main": [
+          [
+            {
+              "node": "Run: Comex Stat",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Run: Comex Stat": {
+        "main": [
+          [
+            {
+              "node": "Run: CONAB PDF",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Run: CONAB PDF": {
+        "main": [
+          [
+            {
+              "node": "Run: FAOSTAT",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Run: FAOSTAT": {
+        "main": [
+          [
+            {
+              "node": "Run: GDELT News",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "active": true
+  }
+]

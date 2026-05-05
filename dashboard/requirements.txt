@@ -1,0 +1,12 @@
+numpy
+pandas
+requests
+streamlit
+plotly
+matplotlib
+geopandas
+nest_asyncio
+websockets
+python-dotenv
+faostat
+yfinance

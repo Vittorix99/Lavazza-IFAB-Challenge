@@ -1,0 +1,850 @@
+{
+  "name": "Lavazza - WTO News",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "manual-trigger-wto",
+      "name": "Manual Trigger"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 */6 * * *"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        200
+      ],
+      "id": "schedule-trigger-wto",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "url": "https://www.wto.org/library/rss/latest_news_e.xml",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 60000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (compatible; LavazzaBot/1.0)"
+            },
+            {
+              "name": "Accept",
+              "value": "application/rss+xml, application/xml, text/xml, */*"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        260,
+        0
+      ],
+      "id": "wto-http-fetch-node",
+      "name": "WTO HTTP Fetch",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const xml = $json.data || '';\n\nfunction extractTag(str, tag) {\n  const match = str.match(new RegExp(`<${tag}(?:[^>]*)>([\\\\s\\\\S]*?)<\\\\/${tag}>`, 'i'));\n  return match ? match[1].replace(/<!\\[CDATA\\[([\\\\s\\\\S]*?)\\]\\]>/g, '$1').trim() : '';\n}\n\nfunction extractAllTags(str, tag) {\n  const results = [];\n  const regex = new RegExp(`<${tag}(?:[^>]*)>([\\\\s\\\\S]*?)<\\\\/${tag}>`, 'gi');\n  let match;\n  while ((match = regex.exec(str)) !== null) {\n    results.push(match[1].replace(/<!\\[CDATA\\[([\\\\s\\\\S]*?)\\]\\]>/g, '$1').trim());\n  }\n  return results;\n}\n\nconst itemRegex = /<item>([\\s\\S]*?)<\\/item>/gi;\nconst items = [];\nlet m;\nwhile ((m = itemRegex.exec(xml)) !== null) {\n  const block = m[1];\n  const link = extractTag(block, 'link') || extractTag(block, 'guid');\n  const title = extractTag(block, 'title');\n  const pubDate = extractTag(block, 'pubDate');\n  const description = extractTag(block, 'description');\n  const category = extractAllTags(block, 'category').join(', ');\n\n  if (!title && !link) continue;\n\n  items.push({\n    json: {\n      title,\n      link,\n      pubDate,\n      text: description.replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim(),\n      category\n    }\n  });\n}\n\nif (!items.length) {\n  throw new Error('WTO RSS: nessun item trovato nel feed XML');\n}\n\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        100
+      ],
+      "id": "wto-parse-rss-node",
+      "name": "WTO Parse RSS"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1300,
+        0
+      ],
+      "id": "wto-loop-node",
+      "name": "WTO Loop"
+    },
+    {
+      "parameters": {
+        "amount": 2,
+        "unit": "seconds"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1560,
+        0
+      ],
+      "id": "wto-wait-node",
+      "name": "WTO Wait",
+      "webhookId": "wto-wait-webhook"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=URL: {{ $json.link }}\nTitle: {{ $json.title }}\nCategory: {{ $json.category }}\nDate: {{ $json.pubDate }}\nText: {{ $json.text }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "=You are filtering news articles for a Lavazza intelligence system that monitors risks related to coffee origins in Brazil.\n\nDecide whether an article is relevant and worth keeping for downstream scraping and analysis.\n\nAn article is relevant only if it is substantially related to at least one of the following:\n\ncoffee production trends, forecasts, or harvest data at regional or national level in Brazil\nBrazilian coffee-growing regions affected by climate, disease, or structural changes\nagribusiness, agriculture, exports, logistics, trade, tariffs, regulation, or policy that may affect Brazilian coffee at regional, national, or international scale\nenvironmental, climate, wildfire, drought, ENSO, or crop-related conditions that may affect Brazilian coffee\ngeopolitical, economic, or supply-chain developments with plausible impact on Brazilian coffee production or exports\nReject articles that are mainly about:\n\ncafes, coffee shops, restaurants, tourism, lifestyle, recipes, or coffee culture\nentertainment, sports, celebrities, general crime, or unrelated politics\ncoffee in general without a meaningful connection to Brazil\nBrazil in general without a meaningful connection to coffee, agriculture, agribusiness, climate risk, or export/logistics risk\nlocal field days, training workshops, municipal extension events, or cooperative press releases about routine operational activities\nsingle-farm or single-municipality initiatives without regional or national significance\nBe conservative. Keep only articles with impact beyond a single municipality or farm — regional, national, or international scope required.\n\nReturn only valid JSON in this exact format:\n\n{\n  \"url\": \"...\",\n  \"keep_article\": true,\n  \"relevance_score\": 0,\n  \"is_about_brazil\": true,\n  \"is_in_scope\": true,\n  \"topic\": \"geo\",\n  \"reason\": \"short explanation\"\n}\nRules:\n\nurl must be the exact URL value provided in the input, copied verbatim.\nkeep_article must be true only if both is_about_brazil and is_in_scope are true AND the article has impact at regional, national, or international scale.\nrelevance_score must be an integer from 0 to 100.\ntopic must be one of: \"geo\", \"crops\", \"prices\", \"environment\", \"other\".\nreason must be short and specific.\nReturn JSON only, with no extra text."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        1820,
+        0
+      ],
+      "id": "wto-llm-filter-node",
+      "name": "WTO LLM Filter",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {
+          "maxRetries": 2
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1820,
+        240
+      ],
+      "id": "wto-openai-filter-node",
+      "name": "WTO OpenAI Filter Model",
+      "retryOnFail": true,
+      "credentials": {
+        "openAiApi": {
+          "id": "0Vum5STk59lUOybm",
+          "name": "OpenAi account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = String($json.text ?? '').trim();\nlet parsed = null;\n\nif (raw) {\n  try {\n    parsed = JSON.parse(raw);\n  } catch {\n    const cleaned = raw\n      .replace(/^```json\\s*/i, '')\n      .replace(/^```\\s*/i, '')\n      .replace(/```$/i, '')\n      .trim();\n    try {\n      parsed = JSON.parse(cleaned);\n    } catch {\n      parsed = null;\n    }\n  }\n}\n\nlet source = {};\ntry {\n  source = $('WTO Wait').item.json || {};\n} catch {\n  source = {};\n}\n\nif (!parsed || typeof parsed !== 'object') {\n  parsed = {\n    url: source.link || null,\n    keep_article: false,\n    relevance_score: 0,\n    is_about_brazil: false,\n    is_in_scope: false,\n    topic: 'other',\n    reason: 'Filter parse fallback: invalid LLM JSON'\n  };\n}\n\nif (!parsed.url) parsed.url = source.link || null;\nif (typeof parsed.keep_article !== 'boolean') parsed.keep_article = false;\nif (!Number.isInteger(parsed.relevance_score)) parsed.relevance_score = Number(parsed.relevance_score) || 0;\nif (!parsed.topic) parsed.topic = 'other';\nif (!parsed.reason) parsed.reason = 'No reason provided';\n\nreturn [{ json: parsed }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2080,
+        0
+      ],
+      "id": "wto-parse-filter-node",
+      "name": "WTO Parse Filter"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "wto-if-condition",
+              "leftValue": "={{ $json.keep_article }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2340,
+        0
+      ],
+      "id": "wto-if-node",
+      "name": "WTO If"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.article_text }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You extract structured signals from news articles about Brazilian coffee and trade. Return only valid JSON, no extra text.\n\nOutput format:\n{\n  \"signals\": [\"...\"],\n  \"entities\": [\"...\"],\n  \"sentiment\": \"positive|negative|neutral\",\n  \"summary_en\": \"...\"\n}\n\nRules:\n- signals: max 5 short strings, each a concrete risk or positive factor for Brazilian coffee\n- entities: regions, organizations, or people mentioned (max 5)\n- sentiment: overall tone toward Brazilian coffee sector\n- summary_en: 1-2 sentences in English summarizing the article\n- Return JSON only, with no extra text."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        2600,
+        0
+      ],
+      "id": "wto-extract-signals-node",
+      "name": "WTO Extract Signals",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {
+          "maxRetries": 2
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        2600,
+        240
+      ],
+      "id": "wto-openai-extract-node",
+      "name": "WTO OpenAI Extract Model",
+      "retryOnFail": true,
+      "credentials": {
+        "openAiApi": {
+          "id": "0Vum5STk59lUOybm",
+          "name": "OpenAi account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "function getCollectedPeriod(isoTs, cadenza) {\n  const d = new Date(isoTs || new Date().toISOString());\n  const pad = n => String(n).padStart(2, '0');\n  const yyyy = d.getUTCFullYear();\n  const mm = pad(d.getUTCMonth() + 1);\n  const dd = pad(d.getUTCDate());\n  const hh = pad(d.getUTCHours());\n  const doy = Math.floor((d - new Date(Date.UTC(yyyy,0,1))) / 86400000);\n  const week = pad(Math.ceil((doy + new Date(Date.UTC(yyyy,0,1)).getUTCDay() + 1) / 7));\n  switch((cadenza||'').toLowerCase()) {\n    case 'hourly':  return `${yyyy}-${mm}-${dd}T${hh}`;\n    case 'daily':   return `${yyyy}-${mm}-${dd}`;\n    case 'weekly':  return `${yyyy}-W${week}`;\n    case 'monthly': return `${yyyy}-${mm}`;\n    default:        return `${yyyy}-${mm}-${dd}`;\n  }\n}\nconst now = new Date().toISOString();\nconst _collectedPeriod = getCollectedPeriod(now, 'daily');\n\n// Parse LLM extraction output\nlet signals = {};\ntry { signals = JSON.parse($json.text || '{}'); } catch(e) { signals = {}; }\n\n// Filter metadata (url, topic, relevance_score, reason) passed through Strip HTML\nconst meta = $('WTO Strip HTML').item.json;\n\n// Original RSS item (title, pubDate) from the loop\nlet original = {};\ntry { original = $('WTO Loop').item.json; } catch(e) {}\n\nreturn [{\n  json: {\n    source: 'WTO_NEWS',\n    source_url: meta.url || original.link || null,\n    country: 'BR',\n    macroarea: 'geo',\n    collected_at: now,\n    collected_period: _collectedPeriod,\n    url: meta.url || original.link || null,\n    topic: meta.topic || null,\n    relevance_score: meta.relevance_score || null,\n    reason: meta.reason || null,\n    title: original.title || null,\n    pubDate: original.pubDate || null,\n    signals: signals.signals || [],\n    entities: signals.entities || [],\n    sentiment: signals.sentiment || null,\n    summary_en: signals.summary_en || null,\n    embed_text: (signals.summary_en || '') + ' ' + (signals.signals || []).join('. ')\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2860,
+        0
+      ],
+      "id": "wto-parse-signals-node",
+      "name": "WTO Parse Signals"
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "raw_geo",
+        "fields": "source,source_url,country,macroarea,collected_at,url,topic,relevance_score,reason,title,pubDate,signals,entities,sentiment,summary_en,embed_text",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        3120,
+        0
+      ],
+      "id": "wto-mongo-raw-geo-node",
+      "name": "WTO MongoDB raw_geo",
+      "credentials": {
+        "mongoDb": {
+          "id": "Jo4ZHZCY4HM8JRrD",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "text-embedding-3-small"
+            },
+            {
+              "name": "input",
+              "value": "={{ $('WTO Parse Signals').item.json.embed_text }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3380,
+        0
+      ],
+      "id": "wto-embeddings-node",
+      "name": "WTO OpenAI Embeddings",
+      "credentials": {
+        "openAiApi": {
+          "id": "0Vum5STk59lUOybm",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "function getCollectedPeriod(collectedAt, cadenza) {\n  const d = new Date(collectedAt || new Date().toISOString());\n  const pad = (n) => String(n).padStart(2, '0');\n  const yyyy = d.getUTCFullYear();\n  const mm = pad(d.getUTCMonth() + 1);\n  const dd = pad(d.getUTCDate());\n  const hh = pad(d.getUTCHours());\n  const startOfYear = new Date(Date.UTC(yyyy, 0, 1));\n  const weekNo = pad(Math.ceil(((d - startOfYear) / 86400000 + startOfYear.getUTCDay() + 1) / 7));\n  switch((cadenza || '').toLowerCase()) {\n    case 'hourly':  return `${yyyy}-${mm}-${dd}T${hh}`;\n    case 'daily':   return `${yyyy}-${mm}-${dd}`;\n    case 'weekly':  return `${yyyy}-W${weekNo}`;\n    case 'monthly': return `${yyyy}-${mm}`;\n    default:        return `${yyyy}-${mm}-${dd}`;\n  }\n}\n\nconst _cadenza = 'daily';\nconst meta = $('WTO Parse Signals').item.json;\nconst _collectedAt = meta.collected_at || new Date().toISOString();\nconst _collectedPeriod = getCollectedPeriod(_collectedAt, _cadenza);\nconst vector = $json.data[0].embedding;\n\nconst url = meta.url || '';\nlet hash = 0;\nfor (let i = 0; i < url.length; i++) {\n  hash = ((hash << 5) - hash) + url.charCodeAt(i);\n  hash |= 0;\n}\nconst pointId = Math.abs(hash) || Math.floor(Math.random() * 1e9);\n\nreturn [{\n  json: {\n    points: [{\n      id: pointId,\n      vector: vector,\n      payload: {\n        country: meta.country,\n        macroarea: meta.macroarea,\n        collected_at: meta.collected_at,\n        url: meta.url,\n        topic: meta.topic,\n        relevance_score: meta.relevance_score,\n        sentiment: meta.sentiment,\n        summary_en: meta.summary_en,\n        signals: meta.signals\n      }\n    }]\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3640,
+        0
+      ],
+      "id": "wto-qdrant-payload-node",
+      "name": "WTO Build Qdrant Payload"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "http://qdrant:6333/collections/geo_texts/points",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3900,
+        0
+      ],
+      "id": "wto-qdrant-upsert-node",
+      "name": "WTO Qdrant Upsert"
+    },
+    {
+      "parameters": {
+        "jsCode": "const now = new Date().toISOString();\nlet itemsIngested = 0;\n\ntry {\n  itemsIngested = $('WTO Parse Signals').all().length;\n} catch {\n  itemsIngested = 0;\n}\n\nreturn [{\n  json: {\n    source: 'WTO_RSS',\n    country: 'BR',\n    macroarea: 'geo',\n    cadenza: '6h',\n    run_date: now,\n    status: 'done',\n    completed_at: now,\n    items_ingested: itemsIngested,\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4160,
+        0
+      ],
+      "id": "wto-build-log-node",
+      "name": "WTO Build Ingestion Log"
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "ingestion_log",
+        "fields": "source,country,macroarea,cadenza,run_date,status,completed_at"
+      },
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        -100
+      ],
+      "id": "wto-mongo-log-node",
+      "name": "WTO MongoDB ingestion_log",
+      "credentials": {
+        "mongoDb": {
+          "id": "Jo4ZHZCY4HM8JRrD",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        4420,
+        0
+      ],
+      "id": "wto-scrape-article-node",
+      "name": "WTO Scrape Article"
+    },
+    {
+      "parameters": {
+        "jsCode": "const html = $json.data || '';\nconst meta = $('WTO Parse Filter').item.json;\n\nconst text = html\n  .replace(/<script[\\s\\S]*?<\\/script>/gi, '')\n  .replace(/<style[\\s\\S]*?<\\/style>/gi, '')\n  .replace(/<[^>]+>/g, ' ')\n  .replace(/\\s+/g, ' ')\n  .trim()\n  .slice(0, 6000);\n\nreturn [{\n  json: {\n    ...meta,\n    article_text: text\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4680,
+        0
+      ],
+      "id": "wto-strip-html-node",
+      "name": "WTO Strip HTML"
+    },
+    {
+      "id": "9ef95871-9c3d-4db0-b788-de77ec2cd6e0",
+      "name": "API Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst err = item.json?.error ?? item.error?.message ?? '';\nconst statusCode = item.json?.statusCode ?? item.json?.status ?? 0;\nif (err || statusCode >= 400) {\n  return [{ json: {\n    _api_skip: true,\n    source: '12_WTO_NEWS',\n    country: 'BR',\n    status: 'skipped_api_error',\n    reason: `API unavailable: ${err || 'HTTP ' + statusCode}`,\n    run_date: new Date().toISOString(),\n    completed_at: new Date().toISOString()\n  } }];\n}\nreturn [{ json: item.json }];"
+      }
+    },
+    {
+      "id": "cf1aeeae-e981-4a5b-b52b-ed84ab96a7c7",
+      "name": "API Skip?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        780,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "68bd1446-66c2-430e-9e1f-cacb2b77f2dc",
+              "leftValue": "={{ $json._api_skip }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "90482171-c796-455b-867e-82ef9687fc11",
+      "name": "Return Status",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        4940,
+        0
+      ],
+      "parameters": {
+        "mode": "manual",
+        "duplicateItem": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d1b0e841-46d2-4cdf-95d7-4814416dd042",
+              "name": "workflow",
+              "value": "=12-wto-news",
+              "type": "string"
+            },
+            {
+              "id": "6b74a7ab-a6ef-44a3-b363-25c5c1911552",
+              "name": "status",
+              "value": "={{ $json.status || 'done' }}",
+              "type": "string"
+            },
+            {
+              "id": "14986c76-4bf8-4db0-8e2a-cdd597fd7486",
+              "name": "completed_at",
+              "value": "={{ new Date().toISOString() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -200
+      ],
+      "id": "execute-workflow-trigger-XVj94x5m",
+      "name": "Execute Workflow Trigger"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "WTO HTTP Fetch": {
+      "main": [
+        [
+          {
+            "node": "API Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WTO Parse RSS": {
+      "main": [
+        [
+          {
+            "node": "WTO Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WTO Loop": {
+      "main": [
+        [
+          {
+            "node": "WTO Wait",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "WTO Build Ingestion Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WTO Wait": {
+      "main": [
+        [
+          {
+            "node": "WTO LLM Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WTO OpenAI Filter Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "WTO LLM Filter",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WTO LLM Filter": {
+      "main": [
+        [
+          {
+            "node": "WTO Parse Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WTO Parse Filter": {
+      "main": [
+        [
+          {
+            "node": "WTO If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WTO If": {
+      "main": [
+        [
+          {
+            "node": "WTO Scrape Article",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "WTO Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WTO OpenAI Extract Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "WTO Extract Signals",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WTO Extract Signals": {
+      "main": [
+        [
+          {
+            "node": "WTO Parse Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WTO Parse Signals": {
+      "main": [
+        [
+          {
+            "node": "WTO MongoDB raw_geo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WTO MongoDB raw_geo": {
+      "main": [
+        [
+          {
+            "node": "WTO OpenAI Embeddings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WTO OpenAI Embeddings": {
+      "main": [
+        [
+          {
+            "node": "WTO Build Qdrant Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WTO Build Qdrant Payload": {
+      "main": [
+        [
+          {
+            "node": "WTO Qdrant Upsert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WTO Build Ingestion Log": {
+      "main": [
+        [
+          {
+            "node": "WTO MongoDB ingestion_log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WTO Scrape Article": {
+      "main": [
+        [
+          {
+            "node": "WTO Strip HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WTO Strip HTML": {
+      "main": [
+        [
+          {
+            "node": "WTO Extract Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WTO Qdrant Upsert": {
+      "main": [
+        [
+          {
+            "node": "WTO Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "WTO HTTP Fetch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "WTO HTTP Fetch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Check": {
+      "main": [
+        [
+          {
+            "node": "API Skip?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Skip?": {
+      "main": [
+        [
+          {
+            "node": "WTO MongoDB ingestion_log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "WTO Parse RSS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WTO MongoDB ingestion_log": {
+      "main": [
+        [
+          {
+            "node": "Return Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "WTO HTTP Fetch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Return Status": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "tags": [],
+  "id": "XVj94x5mVNC7PxnC"
+}

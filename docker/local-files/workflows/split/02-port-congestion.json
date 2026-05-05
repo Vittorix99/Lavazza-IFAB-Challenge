@@ -1,0 +1,482 @@
+{
+  "name": "Lavazza - Port Congestion",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "manual-trigger-port",
+      "name": "Manual Trigger"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 * * * *"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        200
+      ],
+      "id": "schedule-trigger-port",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://ais-port-probe:8080/snapshot",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ listen_time_seconds: 15 }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        260,
+        0
+      ],
+      "id": "port-congestion-snapshot-node",
+      "name": "Port Congestion Snapshot",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// Calcola collected_period da collected_at + cadenza\nfunction getCollectedPeriod(collectedAt, cadenza) {\n  const d = new Date(collectedAt || new Date().toISOString());\n  const pad = (n) => String(n).padStart(2, '0');\n  const yyyy = d.getUTCFullYear();\n  const mm = pad(d.getUTCMonth() + 1);\n  const dd = pad(d.getUTCDate());\n  const hh = pad(d.getUTCHours());\n  // ISO week number\n  const startOfYear = new Date(Date.UTC(yyyy, 0, 1));\n  const weekNo = pad(Math.ceil(((d - startOfYear) / 86400000 + startOfYear.getUTCDay() + 1) / 7));\n  switch((cadenza || '').toLowerCase()) {\n    case 'hourly':  return `${yyyy}-${mm}-${dd}T${hh}`;\n    case 'daily':   return `${yyyy}-${mm}-${dd}`;\n    case 'weekly':  return `${yyyy}-W${weekNo}`;\n    case 'monthly': return `${yyyy}-${mm}`;\n    default:        return `${yyyy}-${mm}-${dd}`;\n  }\n}\n\nconst _cadenza = 'daily';\nconst _collectedAt = new Date().toISOString();\nconst _collectedPeriod = getCollectedPeriod(_collectedAt, _cadenza);\nconst snapshot = $json;\nconst collectedAt = snapshot.completed_at || new Date().toISOString();\nconst ports = Array.isArray(snapshot.ports) ? snapshot.ports : [];\n\nfunction slug(value) {\n  return String(value ?? '')\n    .toLowerCase()\n    .replace(/[^a-z0-9]+/g, '_')\n    .replace(/^_+|_+$/g, '');\n}\n\nconst congestedPorts = ports.filter((port) => Number(port.anchored_vessels_count ?? 0) > 0);\nconst totalAnchored = Number(snapshot.total_anchored_vessels ?? 0);\nconst topPort = snapshot.top_congested_port && Number(snapshot.top_congested_port.anchored_vessels_count ?? 0) > 0\n  ? snapshot.top_congested_port\n  : (congestedPorts[0] ?? null);\n\nconst signals = [];\nif (totalAnchored === 0) signals.push('no_port_queue_detected');\nif (totalAnchored > 0) signals.push('port_queue_detected');\nif (congestedPorts.length >= 2) signals.push('multi_port_congestion');\nif (congestedPorts.length >= 3) signals.push('widespread_port_congestion');\nif (topPort && Number(topPort.anchored_vessels_count ?? 0) >= 3) signals.push('moderate_queue_' + slug(topPort.port_name));\nif (topPort && Number(topPort.anchored_vessels_count ?? 0) >= 6) signals.push('high_queue_' + slug(topPort.port_name));\nif (totalAnchored >= 8) signals.push('regional_export_delay_risk');\nif (Array.isArray(snapshot.errors) && snapshot.errors.length) signals.push('snapshot_data_quality_watch');\n\n\nconst perPortText = ports\n  .map((port) => port.port_name + ': ' + Number(port.anchored_vessels_count ?? 0) + ' anchored vessels')\n  .join('; ');\n\nlet summaryEn;\nif (!congestedPorts.length) {\n  summaryEn = 'No anchored vessel accumulation was detected across the monitored Brazilian port anchorage zones during the ' + snapshot.snapshot_seconds + '-second AIS snapshot.';\n} else {\n  summaryEn = totalAnchored + ' anchored or near-stationary vessels were detected across ' + congestedPorts.length + ' monitored Brazilian port zones during the ' + snapshot.snapshot_seconds + '-second AIS snapshot.';\n  if (topPort) {\n    summaryEn += ' The most congested area was ' + topPort.port_name + ' with ' + topPort.anchored_vessels_count + ' vessels in queue-like conditions.';\n  }\n}\n\nconst embedText = [\n  summaryEn,\n  perPortText,\n  ...signals,\n].filter(Boolean).join(' ');\n\nreturn [{\n  json: {\n    source: 'AISSTREAM_PORT_CONGESTION',\n    source_url: 'wss://stream.aisstream.io/v0/stream',\n    source_format: 'websocket_snapshot',\n    country: 'BR',\n    macroarea: 'geo',\n    collected_at: collectedAt,\n    started_at: snapshot.started_at || null,\n    status: snapshot.status || 'done',\n    snapshot_seconds: Number(snapshot.snapshot_seconds ?? 0),\n    ports_monitored: Number(snapshot.ports_monitored ?? ports.length),\n    port_names: Array.isArray(snapshot.port_names) ? snapshot.port_names : ports.map((port) => port.port_name),\n    raw_messages_received: Number(snapshot.raw_messages_received ?? 0),\n    position_reports_received: Number(snapshot.position_reports_received ?? 0),\n    port_reports_received: Number(snapshot.port_reports_received ?? 0),\n    total_anchored_vessels: totalAnchored,\n    congested_ports_count: congestedPorts.length,\n    top_congested_port: topPort ? {\n      port_name: topPort.port_name,\n      anchored_vessels_count: Number(topPort.anchored_vessels_count ?? 0),\n      average_sog: Number(topPort.average_sog ?? 0),\n    } : null,\nsignals: Array.from(new Set(signals)),\n    summary_en: summaryEn,\n    embed_text: embedText,\n    ports,\n    errors: Array.isArray(snapshot.errors) ? snapshot.errors : [],\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        0
+      ],
+      "id": "port-congestion-parse-node",
+      "name": "Port Congestion Parse"
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "raw_geo",
+        "fields": "source,source_url,source_format,country,macroarea,collected_at,started_at,status,snapshot_seconds,ports_monitored,port_names,raw_messages_received,position_reports_received,port_reports_received,total_anchored_vessels,congested_ports_count,top_congested_port,signals,summary_en,embed_text,ports,errors",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        1300,
+        0
+      ],
+      "id": "port-mongodb-raw-geo-node",
+      "name": "Port MongoDB raw_geo",
+      "credentials": {
+        "mongoDb": {
+          "id": "Jo4ZHZCY4HM8JRrD",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "text-embedding-3-small"
+            },
+            {
+              "name": "input",
+              "value": "={{ $('Port Congestion Parse').item.json.embed_text }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1560,
+        0
+      ],
+      "id": "port-openai-embeddings-node",
+      "name": "Port OpenAI Embeddings",
+      "credentials": {
+        "openAiApi": {
+          "id": "0Vum5STk59lUOybm",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\n// Calcola collected_period da collected_at + cadenza\nfunction getCollectedPeriod(collectedAt, cadenza) {\n  const d = new Date(collectedAt || new Date().toISOString());\n  const pad = (n) => String(n).padStart(2, '0');\n  const yyyy = d.getUTCFullYear();\n  const mm = pad(d.getUTCMonth() + 1);\n  const dd = pad(d.getUTCDate());\n  const hh = pad(d.getUTCHours());\n  // ISO week number\n  const startOfYear = new Date(Date.UTC(yyyy, 0, 1));\n  const weekNo = pad(Math.ceil(((d - startOfYear) / 86400000 + startOfYear.getUTCDay() + 1) / 7));\n  switch((cadenza || '').toLowerCase()) {\n    case 'hourly':  return `${yyyy}-${mm}-${dd}T${hh}`;\n    case 'daily':   return `${yyyy}-${mm}-${dd}`;\n    case 'weekly':  return `${yyyy}-W${weekNo}`;\n    case 'monthly': return `${yyyy}-${mm}`;\n    default:        return `${yyyy}-${mm}-${dd}`;\n  }\n}\n\nconst _cadenza = 'daily';\nconst _collectedAt = new Date().toISOString();\nconst _collectedPeriod = getCollectedPeriod(_collectedAt, _cadenza);\nconst meta = $('Port Congestion Parse').item.json;\nconst vector = $json.data[0].embedding;\nconst key = meta.source + '|' + meta.collected_at + '|' + meta.total_anchored_vessels + '|' + meta.port_reports_received;\nlet hash = 0;\nfor (let i = 0; i < key.length; i++) {\n  hash = ((hash << 5) - hash) + key.charCodeAt(i);\n  hash |= 0;\n}\nconst pointId = Math.abs(hash);\n\nreturn [{\n  json: {\n    points: [{\n      id: pointId,\n      vector,\n      payload: {\n        source: meta.source,\n        country: meta.country,\n        macroarea: meta.macroarea,\n        collected_at: meta.collected_at,\n        snapshot_seconds: meta.snapshot_seconds,\n        total_anchored_vessels: meta.total_anchored_vessels,\n        congested_ports_count: meta.congested_ports_count,\n        top_congested_port: meta.top_congested_port ? meta.top_congested_port.port_name : null,\nsummary_en: meta.summary_en,\n        signals: meta.signals,\n        port_names: meta.port_names,\n      },\n    }],\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1820,
+        0
+      ],
+      "id": "port-build-qdrant-payload-node",
+      "name": "Port Build Qdrant Payload"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "http://qdrant:6333/collections/geo_texts/points",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2080,
+        0
+      ],
+      "id": "port-qdrant-upsert-node",
+      "name": "Port Qdrant Upsert"
+    },
+    {
+      "parameters": {
+        "jsCode": "const now = new Date().toISOString();\nconst meta = $('Port Congestion Parse').item.json;\n\nreturn [{\n  json: {\n    source: 'AISSTREAM_PORT_CONGESTION',\n    country: 'BR',\n    macroarea: 'geo',\n    cadenza: 'hourly',\n    run_date: now,\n    status: 'done',\n    completed_at: now,\n    items_ingested: meta.total_anchored_vessels,\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2340,
+        0
+      ],
+      "id": "port-build-ingestion-log-node",
+      "name": "Port Build Ingestion Log"
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "collection": "ingestion_log",
+        "fields": "source,country,macroarea,cadenza,run_date,status,completed_at"
+      },
+      "type": "n8n-nodes-base.mongoDb",
+      "typeVersion": 1,
+      "position": [
+        2600,
+        0
+      ],
+      "id": "port-mongodb-ingestion-log-node",
+      "name": "Port MongoDB ingestion_log",
+      "credentials": {
+        "mongoDb": {
+          "id": "Jo4ZHZCY4HM8JRrD",
+          "name": "MongoDB account"
+        }
+      }
+    },
+    {
+      "id": "b3acd5e1-1e61-4cd0-be2b-08691d557c34",
+      "name": "API Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        0
+      ],
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst err = item.json?.error ?? item.error?.message ?? '';\nconst statusCode = item.json?.statusCode ?? item.json?.status ?? 0;\nif (err || statusCode >= 400) {\n  return [{ json: {\n    _api_skip: true,\n    source: '02_PORT_CONGESTION',\n    country: 'BR',\n    status: 'skipped_api_error',\n    reason: `API unavailable: ${err || 'HTTP ' + statusCode}`,\n    run_date: new Date().toISOString(),\n    completed_at: new Date().toISOString()\n  } }];\n}\nreturn [{ json: item.json }];"
+      }
+    },
+    {
+      "id": "b9c2aad5-fb18-4f9d-9d7b-fd578db40de9",
+      "name": "API Skip?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        780,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "d1569203-dac4-4d28-b16d-d9618b1ff9c4",
+              "leftValue": "={{ $json._api_skip }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "ac541a17-8c17-4440-a328-e80fd064cc8a",
+      "name": "Return Status",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2860,
+        0
+      ],
+      "parameters": {
+        "mode": "manual",
+        "duplicateItem": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "5d0b21e6-22ff-4faf-a0b0-59a33ca73a7d",
+              "name": "workflow",
+              "value": "=02-port-congestion",
+              "type": "string"
+            },
+            {
+              "id": "745ced0d-6c28-4b8e-baaf-0d05f3b22aa7",
+              "name": "status",
+              "value": "={{ $json.status || 'done' }}",
+              "type": "string"
+            },
+            {
+              "id": "14a83678-7850-4c30-aa1f-0870b79a3e78",
+              "name": "completed_at",
+              "value": "={{ new Date().toISOString() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -200
+      ],
+      "id": "execute-workflow-trigger-NSpu99gf",
+      "name": "Execute Workflow Trigger"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Port Congestion Snapshot": {
+      "main": [
+        [
+          {
+            "node": "API Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Port Congestion Parse": {
+      "main": [
+        [
+          {
+            "node": "Port MongoDB raw_geo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Port MongoDB raw_geo": {
+      "main": [
+        [
+          {
+            "node": "Port OpenAI Embeddings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Port OpenAI Embeddings": {
+      "main": [
+        [
+          {
+            "node": "Port Build Qdrant Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Port Build Qdrant Payload": {
+      "main": [
+        [
+          {
+            "node": "Port Qdrant Upsert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Port Qdrant Upsert": {
+      "main": [
+        [
+          {
+            "node": "Port Build Ingestion Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Port Build Ingestion Log": {
+      "main": [
+        [
+          {
+            "node": "Port MongoDB ingestion_log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Port Congestion Snapshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Port Congestion Snapshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Check": {
+      "main": [
+        [
+          {
+            "node": "API Skip?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Skip?": {
+      "main": [
+        [
+          {
+            "node": "Port MongoDB ingestion_log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Port Congestion Parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Port MongoDB ingestion_log": {
+      "main": [
+        [
+          {
+            "node": "Return Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Port Congestion Snapshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Return Status": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "tags": [],
+  "id": "NSpu99gf4kPYOQVX"
+}

@@ -1,0 +1,103 @@
+name: lavazza_ifab
+
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5678:5678"
+    environment:
+      N8N_HOST: ${N8N_HOST}
+      N8N_PORT: ${N8N_PORT}
+      N8N_PROTOCOL: ${N8N_PROTOCOL}
+      N8N_EDITOR_BASE_URL: ${N8N_EDITOR_BASE_URL}
+      WEBHOOK_URL: ${WEBHOOK_URL}
+      GENERIC_TIMEZONE: ${GENERIC_TIMEZONE}
+      TZ: ${TZ}
+      N8N_RUNNERS_ENABLED: ${N8N_RUNNERS_ENABLED}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      N8N_SECURE_COOKIE: ${N8N_SECURE_COOKIE}
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: ${N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS}
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: ${N8N_BLOCK_ENV_ACCESS_IN_NODE}
+      N8N_PUBLIC_API_DISABLED: "false"
+      NASA_FIRMS_KEY: ${NASA_FIRMS_KEY}
+      USDA_API_KEY: ${USDA_API_KEY}
+      FAOSTAT_USERNAME: ${FAOSTAT_USERNAME}
+      FAOSTAT_PASSWORD: ${FAOSTAT_PASSWORD}
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./local-files:/files
+    depends_on:
+      - mongo
+      - qdrant
+      - ais-port-probe
+    networks:
+      - lavazza_internal
+
+  ais-port-probe:
+    build:
+      context: ./ais-port-probe
+    restart: unless-stopped
+    environment:
+      AISSTREAM_API_KEY: ${AISSTREAM_API_KEY}
+      PORT: 8080
+    networks:
+      - lavazza_internal
+
+  mongo:
+    image: mongo:7.0.30-jammy
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:27018:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGO_APP_DATABASE}
+      MONGO_APP_DATABASE: ${MONGO_APP_DATABASE}
+      MONGO_APP_USERNAME: ${MONGO_APP_USERNAME}
+      MONGO_APP_PASSWORD: ${MONGO_APP_PASSWORD}
+    volumes:
+      - mongo_data:/data/db
+      - ./mongo-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "mongosh --quiet --host 127.0.0.1 --port 27017 --username \"$$MONGO_INITDB_ROOT_USERNAME\" --password \"$$MONGO_INITDB_ROOT_PASSWORD\" --authenticationDatabase admin --eval \"db.adminCommand('ping').ok\" | grep 1"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - lavazza_internal
+
+  qdrant:
+    image: qdrant/qdrant:v1.16.3
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6333:6333"
+      - "127.0.0.1:6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "bash -ec '</dev/tcp/127.0.0.1/6333'"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks:
+      - lavazza_internal
+
+networks:
+  lavazza_internal:
+    driver: bridge
+
+volumes:
+  n8n_data:
+  mongo_data:
+  qdrant_data:
