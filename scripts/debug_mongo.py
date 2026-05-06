@@ -164,10 +164,26 @@ def diagnose(country: str = "BR") -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Diagnostica MongoDB Atlas")
     parser.add_argument("--country", default="BR")
+    parser.add_argument("--summary", action="store_true", help="Output compatto per demo/start.sh")
     args = parser.parse_args()
 
     result = diagnose(country=args.country)
-    print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
+    if args.summary:
+        if not result.get("ok"):
+            print(f"MongoDB Atlas: KO — {result.get('error') or 'errore sconosciuto'}")
+            return 1
+
+        collections = result.get("collections", {})
+        counts = ", ".join(
+            f"{name}={data.get('count_br', 0)}"
+            for name, data in collections.items()
+        )
+        found_sources = result.get("agent_reads", {}).get("crops_found_sources", [])
+        print(f"MongoDB Atlas: OK — db={result.get('db')} ping={result.get('ping_ms')}ms")
+        print(f"MongoDB raw BR: {counts}")
+        print(f"MongoDB agent reads: crops_found={len(found_sources)}")
+    else:
+        print(json.dumps(result, indent=2, ensure_ascii=False, default=str))
     return 0 if result.get("ok") else 1
 
 

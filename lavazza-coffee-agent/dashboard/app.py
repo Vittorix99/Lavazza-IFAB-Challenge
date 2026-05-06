@@ -653,6 +653,21 @@ def _render_rag_debug(question: str, debug: dict, context: str) -> None:
         else:
             col3.metric("Ultimo report", "nessuno")
 
+        route = debug.get("route") or {}
+        if route:
+            st.markdown("**Router semantico**")
+            st.caption(f"Mode: {route.get('mode')} · Aree: {', '.join(route.get('areas', [])) or 'nessuna'}")
+            selected_sources = route.get("selected_sources", [])
+            if selected_sources:
+                st.dataframe(selected_sources, hide_index=True, use_container_width=True)
+            with st.expander("Piano retrieval", expanded=False):
+                st.json({
+                    "mongo_plan": route.get("mongo_plan", {}),
+                    "qdrant_collections": route.get("qdrant_collections", []),
+                    "context_max_chars": route.get("context_max_chars"),
+                    "reason": route.get("reason"),
+                })
+
         st.markdown("**Qdrant (ricerca semantica)**")
         qdrant_rows = [
             {"Collection": coll, "Risultato": res}
@@ -758,18 +773,34 @@ def _build_chat_context(question: str) -> tuple[str, dict]:
     """
     Costruisce il contesto per il chatbot combinando:
     1. Ultimo agent_run (report + score)
-    2. Ricerca semantica Qdrant (se OpenAI disponibile)
-    3. Documento più recente per OGNI sorgente in MongoDB — schema-agnostico,
-       include automaticamente qualsiasi nuova fonte aggiunta via n8n.
+    2. Routing semantico su source_catalog MongoDB + ricerca Qdrant mirata
+    3. Documento più recente da MongoDB solo per source/aree selezionate
     """
     from utils.db import get_db
+    from utils.chat_router import (
+        merge_qdrant_evidence,
+        route_from_source_catalog,
+        summarize_route_for_debug,
+    )
     from utils.qdrant import collection_exists, search
     from source_configs.sources import iter_qdrant_source_targets
 
     parts: list[str] = []
-    debug: dict = {"agent_run": None, "qdrant": {}, "mongodb": {}}
+    debug: dict = {"agent_run": None, "route": {}, "qdrant": {}, "mongodb": {}}
 
     db = get_db()
+    context_max_chars = 14000
+
+    def _append_context_section(section: str) -> None:
+        """Aggiunge una sezione rispettando il budget massimo di contesto."""
+        nonlocal context_max_chars
+        current_len = sum(len(part) + 2 for part in parts)
+        remaining = context_max_chars - current_len
+        if remaining <= 0:
+            return
+        if len(section) > remaining:
+            section = section[: max(0, remaining - 80)] + "\n...[contesto troncato per budget]"
+        parts.append(section)
 
     # ── 1. Ultimo agent run ────────────────────────────────────────────────
     last_run = db["agent_runs"].find_one({}, sort=[("saved_at", -1)])
@@ -783,7 +814,7 @@ def _build_chat_context(question: str) -> tuple[str, dict]:
             f"  {s.get('area','')}: {s.get('score',0)}/100 — {s.get('text','')[:200]}"
             for s in sections
         )
-        parts.append(
+        _append_context_section(
             f"=== ULTIMO REPORT AGENTE ({run_date}, tipo={last_run.get('report_type','?')}) ===\n"
             f"Risk Score: {score:.1f}/100\n"
             f"Headline: {rj.get('headline', '')}\n"
@@ -806,8 +837,6 @@ def _build_chat_context(question: str) -> tuple[str, dict]:
 
     # Limiti per la semantic search generale.
     # geo_texts ha limite più alto perché accumula notizie orarie GDELT/WTO.
-    _SEMANTIC_SEARCH_LIMITS = {"geo_texts": 10, "crops_texts": 5, "reports_archive": 5}
-
     # Keyword utente -> source/collection non vive qui: e' nel registro globale
     # source_configs.sources, cosi' le fonti possono variare senza modificare
     # il codice del chatbot.
@@ -837,24 +866,29 @@ def _build_chat_context(question: str) -> tuple[str, dict]:
         prefix = f"[{' · '.join(metadata)}] " if metadata else ""
         return prefix + text
 
-    def _run_general_semantic_search(embedding: list[float]) -> None:
-        """RAG standard: cerca per similarità vettoriale, senza filtri payload."""
-        for coll in ["geo_texts", "crops_texts", "reports_archive"]:
+    def _run_routed_semantic_search(embedding: list[float], route: dict) -> dict[str, list[dict]]:
+        """RAG standard route-aware: cerca solo nelle collection Qdrant selezionate."""
+        hits_by_collection: dict[str, list[dict]] = {}
+        qdrant_limits = route.get("qdrant_limits", {})
+
+        for coll in route.get("qdrant_collections", []):
             if not collection_exists(coll):
                 debug["qdrant"][f"semantic:{coll}"] = "non trovata"
                 continue
 
-            limit = _SEMANTIC_SEARCH_LIMITS.get(coll, 5)
+            limit = int(qdrant_limits.get(coll, 3))
             hits = search(collection=coll, query_vector=embedding, limit=limit)
+            hits_by_collection[coll] = hits
             debug["qdrant"][f"semantic:{coll}"] = f"{len(hits)} hit"
 
             texts = [_format_qdrant_snippet(h, max_chars=650) for h in hits]
             texts = [t for t in texts if t]
             if texts:
-                parts.append(
+                _append_context_section(
                     f"=== QDRANT SEMANTIC {coll.upper()} ===\n"
                     + "\n---\n".join(texts)
                 )
+        return hits_by_collection
 
     def _run_source_targeted_search(question_lower: str, embedding: list[float]) -> None:
         """RAG mirato: cerca per similarità vettoriale + filtro payload source."""
@@ -878,34 +912,42 @@ def _build_chat_context(question: str) -> tuple[str, dict]:
             texts = [_format_qdrant_snippet(h, max_chars=800) for h in hits]
             texts = [t for t in texts if t]
             if texts:
-                parts.append(
+                _append_context_section(
                     f"=== QDRANT SOURCE-TARGETED [{source_name}] ===\n"
                     + "\n---\n".join(texts)
                 )
 
     embedding = _get_embedding(question)
+    route = route_from_source_catalog(db, embedding, country="BR")
+    context_max_chars = int(route.get("context_max_chars", context_max_chars))
+    debug["route"] = summarize_route_for_debug(route)
+
     if embedding:
-        _run_general_semantic_search(embedding)
+        qdrant_hits_by_collection = _run_routed_semantic_search(embedding, route)
+        route = merge_qdrant_evidence(route, qdrant_hits_by_collection)
+        debug["route"] = summarize_route_for_debug(route)
         _run_source_targeted_search(question.lower(), embedding)
     else:
         debug["qdrant"]["_embedding"] = "errore"
 
-    # ── 3. MongoDB — documenti recenti per sorgente ──────────────────────────
-    # raw_geo (GDELT, WTO): prende gli ultimi 3 documenti per fonte perché
-    # Qdrant geo_texts ha pochi punti e la ricerca semantica non garantisce
-    # che i risultati GDELT compaiano — MongoDB garantisce la presenza.
-    # Per le altre collection basta l'ultimo documento per fonte.
-    _GEO_LIMIT = 3
-    RAW_COLLECTIONS = ["raw_geo", "raw_prices", "raw_crops", "raw_environment"]
+    # ── 3. MongoDB — recupero selettivo guidato dal router ─────────────────
+    # Recupera solo le source/collection selezionate dal catalogo semantico,
+    # allargando il piano se Qdrant trova evidenze pertinenti.
+    mongo_plan = route.get("mongo_plan", {})
 
-    for col_name in RAW_COLLECTIONS:
-        try:
-            sources = db[col_name].distinct("source", {"country": "BR"})
-        except Exception:
-            sources = []
-
+    for col_name, selected_sources in mongo_plan.items():
         col_snippets = []
-        n_docs = _GEO_LIMIT if col_name == "raw_geo" else 1
+        selected_sources = sorted(selected_sources)
+        n_docs = 2 if col_name == "raw_geo" else 1
+
+        if selected_sources:
+            sources = selected_sources
+        else:
+            try:
+                sources = sorted(db[col_name].distinct("source", {"country": "BR"}))
+            except Exception:
+                sources = []
+
         for src in sorted(sources):
             try:
                 docs = list(db[col_name].find(
@@ -918,15 +960,19 @@ def _build_chat_context(question: str) -> tuple[str, dict]:
             except Exception:
                 pass
 
-        debug["mongodb"][col_name] = f"{len(col_snippets)} documenti"
+        debug["mongodb"][col_name] = {
+            "sources": sources,
+            "documents": len(col_snippets),
+        }
         if col_snippets:
-            parts.append(
+            _append_context_section(
                 f"=== {col_name.upper().replace('_', ' ')} ===\n"
                 + "\n\n".join(col_snippets)
             )
 
     context = "\n\n".join(parts) if parts else "Nessun dato di contesto disponibile."
     debug["total_chars"] = len(context)
+    debug["context_max_chars"] = context_max_chars
     debug["sections_found"] = len(parts)
     return context, debug
 

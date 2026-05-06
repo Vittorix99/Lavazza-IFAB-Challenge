@@ -16,6 +16,30 @@ QdrantSourceTarget = tuple[str, str]
 SourceWithCadence = tuple[str, str]
 
 
+RAW_COLLECTION_AREAS: dict[str, str] = {
+    "raw_geo": "geo",
+    "raw_prices": "prices",
+    "raw_crops": "crops",
+    "raw_environment": "environment",
+}
+
+
+AREA_RAW_COLLECTIONS: dict[str, list[str]] = {
+    "geo": ["raw_geo"],
+    "prices": ["raw_prices"],
+    "crops": ["raw_crops"],
+    "environment": ["raw_environment"],
+}
+
+
+AREA_QDRANT_COLLECTIONS: dict[str, list[str]] = {
+    "geo": ["geo_texts"],
+    "crops": ["crops_texts"],
+    "prices": [],
+    "environment": [],
+}
+
+
 # keyword utente -> (collection Qdrant, valore payload source)
 DEFAULT_QDRANT_SOURCE_KEYWORDS: dict[str, QdrantSourceTarget] = {
     "gdelt": ("geo_texts", "GDELT"),
@@ -29,6 +53,40 @@ DEFAULT_QDRANT_SOURCE_KEYWORDS: dict[str, QdrantSourceTarget] = {
     "conab": ("crops_texts", "CONAB"),
     "faostat": ("crops_texts", "FAOSTAT"),
 }
+
+
+def normalize_area(value: str) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in {"colture", "crop"}:
+        return "crops"
+    if normalized in {"price", "prezzi"}:
+        return "prices"
+    if normalized in {"ambiente", "env"}:
+        return "environment"
+    if normalized in {"geopolitics", "geopolitical"}:
+        return "geo"
+    return normalized
+
+
+def get_area_for_raw_collection(collection: str, default: str = "") -> str:
+    return RAW_COLLECTION_AREAS.get(collection, default)
+
+
+def get_raw_collections_for_area(area: str) -> list[str]:
+    return list(AREA_RAW_COLLECTIONS.get(normalize_area(area), []))
+
+
+def get_qdrant_collections_for_area(area: str) -> list[str]:
+    return list(AREA_QDRANT_COLLECTIONS.get(normalize_area(area), []))
+
+
+def get_qdrant_collection_area(collection: str) -> str:
+    for area, collections in AREA_QDRANT_COLLECTIONS.items():
+        if collection in collections:
+            return area
+    if collection == "reports_archive":
+        return "reports"
+    return ""
 
 
 # Fallback cadenze per fonti che non memorizzano "cadenza" nel documento raw.
@@ -138,6 +196,21 @@ def get_source_title(source: str) -> str:
 
 def get_source_area(source: str, default: str = "") -> str:
     return SOURCE_AREAS.get(str(source).upper(), default)
+
+
+def get_all_raw_collections() -> list[str]:
+    return list(RAW_COLLECTION_AREAS.keys())
+
+
+def get_all_qdrant_collections(include_reports: bool = True) -> list[str]:
+    seen: list[str] = []
+    for collections in AREA_QDRANT_COLLECTIONS.values():
+        for collection in collections:
+            if collection not in seen:
+                seen.append(collection)
+    if include_reports:
+        seen.append("reports_archive")
+    return seen
 
 
 def get_qdrant_source_keyword_map() -> dict[str, QdrantSourceTarget]:

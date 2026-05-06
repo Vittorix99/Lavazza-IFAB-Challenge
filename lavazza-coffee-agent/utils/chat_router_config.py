@@ -1,0 +1,8 @@
+"""Macro di configurazione per catalogo source e router semantico."""
+
+SOURCE_CATALOG_EMBEDDING_MODEL = "text-embedding-3-small"
+CHAT_ROUTER_TOP_SOURCES = 6
+CHAT_ROUTER_MIN_SOURCE_SCORE = 0.18
+CHAT_ROUTER_AREA_COVERAGE_MIN_SCORE = 0.30
+CHAT_ROUTER_MAX_AREAS = 3
+CHAT_CONTEXT_MAX_CHARS = 14000

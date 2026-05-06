@@ -127,6 +127,16 @@ else
     ok "Venv trovato."
 fi
 
+# ── Test MongoDB Atlas per demo ──────────────────────────────────────────────
+echo ""
+info "Test connessione MongoDB Atlas..."
+MONGO_DEBUG_CMD=".venv/bin/python3 $REPO_ROOT/scripts/debug_mongo.py --summary"
+if $DOPPLER_PREFIX $MONGO_DEBUG_CMD; then
+    ok "MongoDB Atlas raggiungibile e dati raw leggibili."
+else
+    warn "Test MongoDB Atlas fallito — controlla MONGODB_URI, whitelist IP e database."
+fi
+
 # ── Debug Qdrant Cloud opzionale ─────────────────────────────────────────────
 if [[ "${QDRANT_DEBUG:-}" =~ ^(1|true|TRUE|yes|YES|on|ON)$ ]]; then
     echo ""
