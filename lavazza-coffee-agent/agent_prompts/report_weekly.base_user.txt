@@ -1,0 +1,29 @@
+PERIODO: settimana al {run_at}
+RISK SCORE FINALE: {final_score:.1f}/100 ({risk_label})
+
+Score per area:
+  🌍 Geopolitico:  {score_geo:.0f}/100
+  🌿 Ambiente:     {score_env:.0f}/100
+  🌱 Colture:      {score_crops:.0f}/100
+  💰 Prezzi:       {score_prices:.0f}/100
+
+SEGNALI GEOPOLITICI:
+{signals_geo}
+
+SEGNALI AMBIENTE:
+{signals_env}
+
+SEGNALI COLTURE:
+{signals_crops}
+
+SEGNALI PREZZI:
+{signals_prices}
+
+SINTESI PER AREA:
+  Geo:      {summary_geo}
+  Ambiente: {summary_env}
+  Colture:  {summary_crops}
+  Prezzi:   {summary_prices}
+
+ALERT ATTIVI: {alerts_str}
+{rag_section}

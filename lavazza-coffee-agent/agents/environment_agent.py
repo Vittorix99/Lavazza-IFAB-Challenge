@@ -14,6 +14,7 @@ Fonti attuali (raw_environment): NOAA_ENSO, NASA_FIRMS
 from datetime import datetime, timezone
 
 from agents.state import AgentState
+from source_configs.sources import get_freshness_threshold_days, get_source_cadence
 from utils.db import get_recent_docs, get_db
 from utils.llm_analyzer import analyze_with_haiku
 from utils.split_doc import split_doc
@@ -22,31 +23,17 @@ from utils.geo_utils import tag_fires_with_coffee_zones
 
 import re as _re
 
-# Fallback cadenze per fonti che non memorizzano 'cadenza' nel documento raw
-_SOURCE_CADENCE = {
-    "NOAA_ENSO": "monthly",
-    "NASA_FIRMS": "hourly",
-}
-
 
 def _compute_freshness(doc: dict, demo_mode: bool) -> dict:
     """
     Calcola freschezza usando il campo 'cadenza' del documento stesso,
-    con fallback sulla mappa _SOURCE_CADENCE per fonti che non lo memorizzano.
+    con fallback sul registro source_configs per fonti che non lo memorizzano.
     """
     cadence = str(doc.get("cadenza", "")).strip().lower()
     if not cadence or cadence == "unknown":
-        source = str(doc.get("source", "")).upper()
-        cadence = _SOURCE_CADENCE.get(source, "unknown")
+        cadence = get_source_cadence(str(doc.get("source", "")))
 
-    thresholds = {
-        "hourly": 1,
-        "daily": 2,
-        "weekly": 10,
-        "monthly": 35,
-        "unknown": 30,
-    }
-    threshold = thresholds.get(cadence, 30)
+    threshold = get_freshness_threshold_days(cadence)
 
     try:
         raw_ts = str(doc.get("collected_at", "")).strip()

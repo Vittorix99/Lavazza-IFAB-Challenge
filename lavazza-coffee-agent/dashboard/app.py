@@ -764,6 +764,7 @@ def _build_chat_context(question: str) -> tuple[str, dict]:
     """
     from utils.db import get_db
     from utils.qdrant import collection_exists, search
+    from source_configs.sources import iter_qdrant_source_targets
 
     parts: list[str] = []
     debug: dict = {"agent_run": None, "qdrant": {}, "mongodb": {}}
@@ -792,73 +793,100 @@ def _build_chat_context(question: str) -> tuple[str, dict]:
         )
         debug["agent_run"] = {"date": run_date, "score": score, "type": last_run.get("report_type", "?")}
 
-    # ── 2. Ricerca semantica Qdrant ────────────────────────────────────────
-    # geo_texts: limit alto (10) perché accumula notizie orarie GDELT/WTO —
-    # è l'unico modo per recuperare notizie storiche oltre l'ultimo documento.
-    _QDRANT_LIMITS = {"geo_texts": 10, "crops_texts": 5, "reports_archive": 5}
+    # ── 2. RAG Qdrant: due strategie distinte ──────────────────────────────
+    # A) Semantic search generale:
+    #    usa solo l'embedding della domanda e recupera i chunk più simili.
+    #    Non richiede che l'utente nomini una fonte specifica.
+    #
+    # B) Source-targeted search:
+    #    parte solo se la domanda nomina esplicitamente una fonte (GDELT, WTO,
+    #    CONAB, ...). Usa lo stesso embedding, ma aggiunge filters={"source": ...}
+    #    per forzare risultati da quella sorgente. Questo richiede un payload
+    #    index Qdrant su source, gestito in utils.qdrant.ensure_payload_index().
 
-    # Mappa keyword → nome sorgente nei payload Qdrant.
-    # Usata per ricerche targeted quando la query menziona una fonte specifica:
-    # "gdelt" non compare nel testo embedded (solo summary_en + signals),
-    # quindi la ricerca semantica non restituisce risultati GDELT.
-    # La ricerca con filtro source bypassa questo problema.
-    _SOURCE_KEYWORD_MAP = {
-        "gdelt": ("geo_texts", "GDELT"),
-        "wto": ("geo_texts", "WTO_RSS"),
-        "nasa": ("geo_texts", "NASA_FIRMS"),
-        "ais": ("geo_texts", "AISSTREAM_PORT_CONGESTION"),
-        "port congestion": ("geo_texts", "AISSTREAM_PORT_CONGESTION"),
-        "congestion": ("geo_texts", "AISSTREAM_PORT_CONGESTION"),
-        "conab": ("crops_texts", "CONAB"),
-        "faostat": ("crops_texts", "FAOSTAT"),
-    }
+    # Limiti per la semantic search generale.
+    # geo_texts ha limite più alto perché accumula notizie orarie GDELT/WTO.
+    _SEMANTIC_SEARCH_LIMITS = {"geo_texts": 10, "crops_texts": 5, "reports_archive": 5}
 
-    embedding = _get_embedding(question)
-    if embedding:
+    # Keyword utente -> source/collection non vive qui: e' nel registro globale
+    # source_configs.sources, cosi' le fonti possono variare senza modificare
+    # il codice del chatbot.
+
+    def _format_qdrant_snippet(hit: dict, max_chars: int) -> str:
+        """Rende ogni hit Qdrant citabile: metadati fonte/data + testo recuperato."""
+        text = (
+            hit.get("text")
+            or hit.get("content")
+            or hit.get("summary_en")
+            or hit.get("embed_text")
+            or hit.get("executive_summary")
+            or hit.get("headline")
+            or ""
+        )[:max_chars]
+        if not text:
+            return ""
+
+        metadata = []
+        if source := hit.get("source"):
+            metadata.append(str(source))
+        if collected_at := hit.get("collected_at"):
+            metadata.append(str(collected_at)[:10])
+        if topic := hit.get("topic"):
+            metadata.append(str(topic))
+
+        prefix = f"[{' · '.join(metadata)}] " if metadata else ""
+        return prefix + text
+
+    def _run_general_semantic_search(embedding: list[float]) -> None:
+        """RAG standard: cerca per similarità vettoriale, senza filtri payload."""
         for coll in ["geo_texts", "crops_texts", "reports_archive"]:
             if not collection_exists(coll):
-                debug["qdrant"][coll] = "non trovata"
+                debug["qdrant"][f"semantic:{coll}"] = "non trovata"
                 continue
-            limit = _QDRANT_LIMITS.get(coll, 5)
+
+            limit = _SEMANTIC_SEARCH_LIMITS.get(coll, 5)
             hits = search(collection=coll, query_vector=embedding, limit=limit)
-            debug["qdrant"][coll] = f"{len(hits)} hit"
-            texts = [
-                (h.get("text") or h.get("content") or h.get("summary_en")
-                 or h.get("embed_text") or h.get("executive_summary") or "")[:400]
-                for h in hits
-            ]
-            texts = [t for t in texts if t]
-            if texts:
-                parts.append(f"=== QDRANT {coll.upper()} ===\n" + "\n---\n".join(texts))
+            debug["qdrant"][f"semantic:{coll}"] = f"{len(hits)} hit"
 
-        # Ricerca targeted per fonti specifiche menzionate nella query.
-        # "GDELT" non compare nel testo embedded → il semantic search non trova
-        # documenti GDELT se si chiede "notizie GDELT". Il filtro source risolve.
-        question_lower = question.lower()
-        targeted_hits_by_source: dict[str, list] = {}
-        for keyword, (coll, source_name) in _SOURCE_KEYWORD_MAP.items():
-            if keyword in question_lower and collection_exists(coll):
-                targeted = search(
-                    collection=coll,
-                    query_vector=embedding,
-                    limit=5,
-                    filters={"source": source_name},
-                )
-                if targeted:
-                    targeted_hits_by_source.setdefault(source_name, []).extend(targeted)
-
-        for source_name, t_hits in targeted_hits_by_source.items():
-            texts = [
-                (h.get("text") or h.get("content") or h.get("summary_en")
-                 or h.get("embed_text") or h.get("headline") or "")[:600]
-                for h in t_hits
-            ]
+            texts = [_format_qdrant_snippet(h, max_chars=650) for h in hits]
             texts = [t for t in texts if t]
             if texts:
                 parts.append(
-                    f"=== QDRANT TARGETED [{source_name}] ===\n" + "\n---\n".join(texts)
+                    f"=== QDRANT SEMANTIC {coll.upper()} ===\n"
+                    + "\n---\n".join(texts)
                 )
-                debug["qdrant"][f"targeted_{source_name}"] = f"{len(t_hits)} hit"
+
+    def _run_source_targeted_search(question_lower: str, embedding: list[float]) -> None:
+        """RAG mirato: cerca per similarità vettoriale + filtro payload source."""
+        targeted_hits_by_source: dict[str, list] = {}
+
+        for keyword, coll, source_name in iter_qdrant_source_targets(question_lower):
+            if not collection_exists(coll):
+                continue
+
+            hits = search(
+                collection=coll,
+                query_vector=embedding,
+                limit=5,
+                filters={"source": source_name},
+            )
+            debug["qdrant"][f"source_targeted:{source_name}"] = f"{len(hits)} hit (keyword: {keyword})"
+            if hits:
+                targeted_hits_by_source.setdefault(source_name, []).extend(hits)
+
+        for source_name, hits in targeted_hits_by_source.items():
+            texts = [_format_qdrant_snippet(h, max_chars=800) for h in hits]
+            texts = [t for t in texts if t]
+            if texts:
+                parts.append(
+                    f"=== QDRANT SOURCE-TARGETED [{source_name}] ===\n"
+                    + "\n---\n".join(texts)
+                )
+
+    embedding = _get_embedding(question)
+    if embedding:
+        _run_general_semantic_search(embedding)
+        _run_source_targeted_search(question.lower(), embedding)
     else:
         debug["qdrant"]["_embedding"] = "errore"
 
@@ -907,19 +935,29 @@ def _stream_chat_response(question: str, context: str, history: list[dict]):
     """Generator che streamma la risposta di Claude Sonnet."""
     system = """\
 Sei l'esperto globale delle origini del caffè di Lavazza.
-Hai accesso in tempo reale a tutti i dati di intelligence sul Brasile: il contesto che ricevi
-contiene l'ultimo documento per ogni sorgente attiva nel sistema (raw_geo, raw_prices,
-raw_crops, raw_environment). Le sorgenti possono includere: GDELT, WTO News, Port Congestion,
-CONAB, USDA FAS, IBGE SIDRA, Comex Stat, FAOSTAT, World Bank Pink Sheet, BCB PTAX, ECB,
-NASA FIRMS, NOAA ENSO — e qualsiasi nuova sorgente aggiunta in futuro.
+Hai accesso in tempo reale a dati RAG su Brasile e supply chain caffè:
+- Qdrant semantic search: chunk testuali rilevanti da geo_texts, crops_texts e reports_archive.
+- Qdrant source-targeted search: chunk filtrati per source quando l'utente nomina una fonte.
+- MongoDB raw collections: ultimo/i documento/i disponibili per sorgente.
 
-Regole:
+Le sorgenti possono includere: GDELT, WTO News, Port Congestion, CONAB, USDA FAS, IBGE SIDRA,
+Comex Stat, FAOSTAT, World Bank Pink Sheet, BCB PTAX, ECB, NASA FIRMS, NOAA ENSO.
+
+Regole di accuratezza:
 - Rispondi SEMPRE in italiano.
-- Cita numeri specifici e la fonte (es. "BCB PTAX: 5.42 BRL/USD al 2026-04-10").
-- Usa i dati del contesto — non inventare cifre.
-- Sii conciso (max 200 parole) a meno che l'utente chieda un approfondimento.
-- Se una domanda riguarda una fonte non presente nel contesto, dillo esplicitamente.
+- Usa solo il contesto fornito e la cronologia recente. Non inventare cifre, date o fonti.
+- Cita numeri specifici con fonte e data quando presenti, es. "BCB PTAX, 2026-04-10: 5.42 BRL/USD".
+- Se una metrica non è nel contesto, dillo chiaramente invece di dedurla.
+- Distingui fatti osservati, interpretazione e livello di confidenza.
+- Se le fonti sono discordanti o insufficienti, spiega cosa manca.
 - Se la domanda è fuori dal dominio caffè/Brasile/supply chain, reindirizza educatamente.
+
+Stile risposta:
+- Dai prima la risposta diretta in 2-4 frasi.
+- Poi sviluppa con dettagli utili: evidenze per fonte, implicazioni operative, rischi e caveat.
+- Per domande analitiche usa sezioni brevi con titoli, non un blocco unico.
+- Per domande semplici resta sintetico; per domande di rischio/prezzi/logistica/qualità rispondi in modo più dettagliato.
+- Chiudi con "Da monitorare" solo se dal contesto emergono segnali concreti da seguire.
 """
     messages = []
     for msg in history[-6:]:  # ultimi 6 messaggi per contesto
@@ -928,15 +966,17 @@ Regole:
     messages.append({
         "role": "user",
         "content": (
+            "Usa il seguente contesto RAG per rispondere in modo preciso, dettagliato "
+            "e tracciabile alle fonti. Non citare sezioni non rilevanti.\n\n"
             f"Contesto dati aggiornati:\n{context}\n\n"
-            f"Domanda: {question}"
+            f"Domanda utente: {question}"
         ),
     })
 
     client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
     with client.messages.stream(
         model="claude-sonnet-4-6",
-        max_tokens=600,
+        max_tokens=1200,
         system=system,
         messages=messages,
     ) as stream:
@@ -968,10 +1008,29 @@ with st.sidebar:
     st.caption("Servizi attivi:")
     mongo_host = os.environ.get("MONGODB_URI", "")
     mongo_label = "Atlas Cloud" if "mongodb+srv" in mongo_host else "localhost:27017"
-    qdrant_host = os.environ.get("QDRANT_URL", "localhost:6333")
+    qdrant_host = os.environ.get("QDRANT_URL", "")
     qdrant_label = "Qdrant Cloud" if "cloud.qdrant.io" in qdrant_host else qdrant_host
     st.caption(f"• MongoDB {mongo_label}")
     st.caption(f"• Qdrant {qdrant_label}")
+    with st.expander("Qdrant debug", expanded=False):
+        if st.button("Test connessione Qdrant", use_container_width=True):
+            from utils.qdrant import diagnose_connection
+            st.session_state["qdrant_diagnostics"] = diagnose_connection()
+
+        diag = st.session_state.get("qdrant_diagnostics")
+        if diag:
+            status = "OK" if diag.get("ok") else "ERRORE"
+            st.caption(f"Status: {status}")
+            st.caption(f"URL: {diag.get('url')}")
+            st.caption(f"Cloud: {diag.get('is_cloud')}")
+            st.caption(f"API key: {diag.get('api_key')}")
+            st.caption(f"Latency: {diag.get('latency_ms')} ms")
+            if diag.get("error"):
+                st.error(diag["error"])
+
+            rows = diag.get("collections_checked", [])
+            if rows:
+                st.dataframe(rows, hide_index=True, use_container_width=True)
     st.caption("• n8n localhost:5678")
     st.divider()
     st.caption("Agenti LangGraph:")

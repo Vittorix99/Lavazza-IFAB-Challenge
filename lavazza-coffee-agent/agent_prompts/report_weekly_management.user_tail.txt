@@ -1,0 +1,22 @@
+
+Produci questo JSON per il Management:
+{{
+  "headline": "<titolo strategico con risk score, max 80 caratteri>",
+  "focus": "management",
+  "executive_summary": "<3-4 frasi: quadro complessivo, trend, impatto business>",
+  "sections": [
+    {{"area": "geo",         "score": {score_geo_int}, "text": "<50-70 parole>", "signals": ["<chiave>"]}},
+    {{"area": "environment", "score": {score_env_int}, "text": "<50-70 parole>", "signals": ["<chiave>"]}},
+    {{"area": "crops",       "score": {score_crops_int}, "text": "<50-70 parole>", "signals": ["<chiave>"]}},
+    {{"area": "prices",      "score": {score_prices_int}, "text": "<50-70 parole>", "signals": ["<chiave>"]}}
+  ],
+  "correlations": ["<correlazione strategica 1>", "<correlazione 2>"],
+  "business_impact": "<impatto diretto sul P&L / supply chain Lavazza>",
+  "strategic_actions": [
+    "<decisione strategica 1>",
+    "<decisione strategica 2>"
+  ],
+  "risk_score": {final_score_r},
+  "alerts": {alerts_json},
+  "outlook": "<outlook 7-14 giorni: eventi chiave da monitorare>"
+}}

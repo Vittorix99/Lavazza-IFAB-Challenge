@@ -46,7 +46,48 @@ if [[ "$USE_DOPPLER" == false ]]; then
     ok "Segreti: file lavazza-coffee-agent/.env"
 fi
 
-[[ -f "$DOCKER_DIR/.env" ]] || err "Manca docker/.env — copia docker/.env.example e compila."
+# ── Docker .env ──────────────────────────────────────────────────────────────
+# Docker Compose legge solo docker/.env: se manca, lo creiamo dai default locali
+# e, quando possibile, sovrascriviamo con i secret Doppler disponibili.
+if [[ ! -f "$DOCKER_DIR/.env" ]]; then
+    [[ -f "$DOCKER_DIR/.env.example" ]] || err "Manca docker/.env.example"
+
+    warn "Manca docker/.env — lo creo da docker/.env.example"
+    cp "$DOCKER_DIR/.env.example" "$DOCKER_DIR/.env"
+
+    if grep -q "CHANGE-ME-run-openssl-rand-hex-32" "$DOCKER_DIR/.env" 2>/dev/null; then
+        N8N_KEY="$(openssl rand -hex 32)"
+        sed -i '' "s/CHANGE-ME-run-openssl-rand-hex-32/$N8N_KEY/" "$DOCKER_DIR/.env"
+    fi
+
+    if [[ "$USE_DOPPLER" == true ]]; then
+        TMP_DOPPLER_ENV="$(mktemp)"
+        if doppler secrets download --no-file --format env > "$TMP_DOPPLER_ENV"; then
+            while IFS= read -r line; do
+                [[ -z "$line" || "$line" == \#* || "$line" != *=* ]] && continue
+                key="${line%%=*}"
+                tmp_file="$(mktemp)"
+                awk -F= -v key="$key" '$1 != key { print }' "$DOCKER_DIR/.env" > "$tmp_file"
+                mv "$tmp_file" "$DOCKER_DIR/.env"
+                printf '%s\n' "$line" >> "$DOCKER_DIR/.env"
+            done < "$TMP_DOPPLER_ENV"
+        else
+            warn "Non riesco a scaricare i secret Doppler per docker/.env — uso i default locali."
+        fi
+        rm -f "$TMP_DOPPLER_ENV"
+    fi
+
+    chmod 600 "$DOCKER_DIR/.env"
+    ok "Creato docker/.env"
+fi
+
+# ── Validazione Qdrant Cloud ─────────────────────────────────────────────────
+if [[ -f "$AGENT_DIR/.env" ]]; then
+    if grep -q '^QDRANT_URL=.*cloud\.qdrant\.io' "$AGENT_DIR/.env" \
+        && ! grep -q '^QDRANT_API_KEY=.\+' "$AGENT_DIR/.env"; then
+        err "QDRANT_API_KEY mancante in Doppler/.env — Qdrant Cloud risponde 403 senza API key."
+    fi
+fi
 
 # ── Whitelist IP su Atlas ─────────────────────────────────────────────────────
 echo ""
@@ -84,6 +125,18 @@ if [[ ! -f ".venv/bin/activate" ]]; then
 else
     source .venv/bin/activate
     ok "Venv trovato."
+fi
+
+# ── Debug Qdrant Cloud opzionale ─────────────────────────────────────────────
+if [[ "${QDRANT_DEBUG:-}" =~ ^(1|true|TRUE|yes|YES|on|ON)$ ]]; then
+    echo ""
+    info "Debug Qdrant Cloud..."
+    QDRANT_DEBUG_CMD=".venv/bin/python3 $REPO_ROOT/scripts/debug_qdrant.py --debug"
+    if $DOPPLER_PREFIX $QDRANT_DEBUG_CMD; then
+        ok "Qdrant raggiungibile."
+    else
+        warn "Debug Qdrant fallito — controlla QDRANT_URL e QDRANT_API_KEY."
+    fi
 fi
 
 # ── Avvia Dashboard ───────────────────────────────────────────────────────────

@@ -1,0 +1,32 @@
+AREA DI ANALISI: {area}
+DOMINIO: {description}
+PAESE: {country}
+
+=== DOCUMENTI DA ANALIZZARE ===
+{docs_text}
+
+=== ISTRUZIONI ===
+Leggi ogni documento, identifica i dati rilevanti (qualunque siano i nomi dei campi),
+e produci segnali di rischio per la supply chain caffè brasiliana.
+
+Scala di riferimento per lo score di quest'area:
+{score_scale}
+
+Rispondi con questo JSON esatto:
+{{
+  "signals": [
+    {{
+      "source": "<valore del campo 'source' nel documento>",
+      "area": "{area}",
+      "fact": "<fatto chiave con valori numerici, max 120 caratteri>",
+      "direction": "<positive|negative|neutral>",
+      "intensity": "<low|medium|high>",
+      "explanation": "<perché questo fatto impatta la supply caffè, max 200 caratteri>"
+    }}
+  ],
+  "summary": "<sintesi rischio {area} in 2-3 frasi con i dati più rilevanti>",
+  "score": <numero float 0-100 secondo la scala fornita>
+}}
+
+Genera 1 segnale per documento (2 se il documento è molto ricco).
+Se un dato è neutro o irrilevante per il caffè, usa direction=neutral e intensity=low.

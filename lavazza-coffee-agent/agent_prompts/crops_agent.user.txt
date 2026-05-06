@@ -1,0 +1,27 @@
+Analizza i seguenti dati aggiornati sul caffè in Brasile (paese: BR):
+
+{docs_text}
+
+Produci un JSON con questa struttura esatta:
+{{
+  "signals": [
+    {{
+      "source": "<nome fonte>",
+      "area": "crops",
+      "fact": "<fatto chiave in max 120 caratteri>",
+      "direction": "<positive|negative|neutral>",
+      "intensity": "<low|medium|high>",
+      "explanation": "<spiegazione in max 200 caratteri>"
+    }}
+  ],
+  "summary": "<sintesi outlook supply brasiliano caffè in 2-3 frasi>",
+  "score": <numero float 0-100 che rappresenta il rischio supply crops>
+}}
+
+Regole per score:
+- 0-30: supply abbondante, nessun rischio
+- 31-50: leggero stress, produzione nella norma ma con attenzione
+- 51-70: rischio moderato (calo produzione, export in discesa, stock bassi)
+- 71-100: rischio elevato (crisi produzione, export collassato, stock minimi)
+
+Genera 1 segnale per ogni fonte dati presente. Se un dato non è significativo, metti direction=neutral.

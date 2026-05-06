@@ -25,20 +25,22 @@ import anthropic
 from dotenv import load_dotenv
 
 from agents.state import AgentState
+from source_configs.sources import get_crops_sources, get_freshness_threshold_days
 from utils.db import get_latest_doc
+from utils.prompt_loader import load_prompt
 from utils.split_doc import split_doc
 
 load_dotenv()
 
-_SOURCES = [
-    ("USDA_FAS_PSD", "settimanale"),
-    ("IBGE_SIDRA_LSPA", "settimanale"),
-    ("COMEX_STAT", "mensile"),
-    ("CONAB_CAFE_SAFRA", "settimanale"),
-    ("FAOSTAT_QCL", "mensile"),
-]
+_SYSTEM_PROMPT = load_prompt(
+    "crops_agent.system.txt",
+    "Sei un analista commodity caffè. Rispondi solo con JSON valido.",
+)
 
-_FRESHNESS_DAYS = {"settimanale": 10, "mensile": 35}
+_USER_TEMPLATE = load_prompt(
+    "crops_agent.user.txt",
+    "Analizza questi dati crops e rispondi con JSON valido: {docs_text}",
+)
 
 
 def _freshness(doc: dict, cadence: str, demo_mode: bool) -> dict:
@@ -49,51 +51,12 @@ def _freshness(doc: dict, cadence: str, demo_mode: bool) -> dict:
         days_old = (datetime.now(timezone.utc) - dt).days
     except Exception:
         days_old = None
-    threshold = _FRESHNESS_DAYS.get(cadence, 30)
+    threshold = get_freshness_threshold_days(cadence)
     return {
         "days_old": days_old,
         "is_fresh": demo_mode or (days_old is not None and days_old <= threshold),
         "cadenza": cadence,
     }
-
-
-_SYSTEM_PROMPT = """\
-Sei un analista specializzato in commodity agricole, in particolare nel mercato \
-del caffè arabica brasiliano. Analizzi dati di produzione, export e stock per \
-valutare il rischio supply chain per un torrefattore europeo (Lavazza).
-
-Rispondi SEMPRE e SOLO con JSON valido, senza testo aggiuntivo fuori dal JSON.
-"""
-
-_USER_TEMPLATE = """\
-Analizza i seguenti dati aggiornati sul caffè in Brasile (paese: BR):
-
-{docs_text}
-
-Produci un JSON con questa struttura esatta:
-{{
-  "signals": [
-    {{
-      "source": "<nome fonte>",
-      "area": "crops",
-      "fact": "<fatto chiave in max 120 caratteri>",
-      "direction": "<positive|negative|neutral>",
-      "intensity": "<low|medium|high>",
-      "explanation": "<spiegazione in max 200 caratteri>"
-    }}
-  ],
-  "summary": "<sintesi outlook supply brasiliano caffè in 2-3 frasi>",
-  "score": <numero float 0-100 che rappresenta il rischio supply crops>
-}}
-
-Regole per score:
-- 0-30: supply abbondante, nessun rischio
-- 31-50: leggero stress, produzione nella norma ma con attenzione
-- 51-70: rischio moderato (calo produzione, export in discesa, stock bassi)
-- 71-100: rischio elevato (crisi produzione, export collassato, stock minimi)
-
-Genera 1 segnale per ogni fonte dati presente. Se un dato non è significativo, metti direction=neutral.
-"""
 
 
 def _build_docs_text(docs_for_llm: list[tuple[str, dict]]) -> str:
@@ -191,7 +154,7 @@ def crops_agent(state: AgentState) -> dict:
     sources_found: list[str] = []
 
     # --- Carica documenti da MongoDB -------------------------------------
-    for source, cadence in _SOURCES:
+    for source, cadence in get_crops_sources():
         doc = get_latest_doc("raw_crops", source)
         if doc:
             llm_part, chart_part = split_doc(doc)

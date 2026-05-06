@@ -27,6 +27,7 @@ import anthropic
 from dotenv import load_dotenv
 
 from agents.state import AgentState
+from utils.prompt_loader import load_prompt
 
 load_dotenv()
 
@@ -125,59 +126,15 @@ def _call_sonnet(system: str, user: str, max_tokens: int = 3000) -> str:
 # Daily report
 # ---------------------------------------------------------------------------
 
-_DAILY_SYSTEM = """\
-Sei l'esperto globale delle origini del caffè di Lavazza.
-Produci report di intelligence giornalieri: concisi, precisi, orientati alla decisione.
-Tono: professionale e diretto. Cita sempre valori numerici concreti.
-Lunghezza sezioni: 60-80 parole ciascuna. Executive summary: 2-3 frasi.
-Lingua: italiano. Rispondi SOLO con JSON valido.
-"""
+_DAILY_SYSTEM = load_prompt(
+    "report_daily.system.txt",
+    "Sei l'esperto globale delle origini del caffè di Lavazza. Rispondi solo con JSON valido.",
+)
 
-_DAILY_USER = """\
-DATA: {run_at}
-RISK SCORE FINALE: {final_score:.1f}/100 ({risk_label})
-Score per area — Geo: {score_geo:.0f} | Ambiente: {score_env:.0f} | Colture: {score_crops:.0f} | Prezzi: {score_prices:.0f}
-
-SEGNALI GEOPOLITICI:
-{signals_geo}
-
-SEGNALI AMBIENTE:
-{signals_env}
-
-SEGNALI COLTURE:
-{signals_crops}
-
-SEGNALI PREZZI:
-{signals_prices}
-
-SINTESI:
-  Geo: {summary_geo}
-  Ambiente: {summary_env}
-  Colture: {summary_crops}
-  Prezzi: {summary_prices}
-
-ALERT ATTIVI: {alerts_str}
-{rag_section}
-
-Produci questo JSON:
-{{
-  "headline": "<titolo incisivo max 80 caratteri con dato numerico chiave>",
-  "executive_summary": "<2-3 frasi che catturano il quadro completo con numeri>",
-  "sections": [
-    {{"area": "geo",         "score": {score_geo_int}, "text": "<60-80 parole>", "signals": ["<chiave 1>", "<chiave 2>"]}},
-    {{"area": "environment", "score": {score_env_int}, "text": "<60-80 parole>", "signals": ["<chiave>"]}},
-    {{"area": "crops",       "score": {score_crops_int}, "text": "<60-80 parole>", "signals": ["<chiave 1>", "<chiave 2>"]}},
-    {{"area": "prices",      "score": {score_prices_int}, "text": "<60-80 parole>", "signals": ["<chiave>"]}}
-  ],
-  "correlations": ["<correlazione cross-area 1>", "<correlazione 2>"],
-  "risk_score": {final_score_r},
-  "alerts": {alerts_json},
-  "outlook": "<cosa monitorare nelle prossime 24-48h, con indicatori specifici>",
-  "report_type": "daily",
-  "country": "BR",
-  "run_at": "{run_at}"
-}}
-"""
+_DAILY_USER = load_prompt(
+    "report_daily.user.txt",
+    "Genera un report daily JSON usando questo contesto: {run_at} {final_score}",
+)
 
 
 def _generate_daily(state: AgentState) -> dict:
@@ -203,139 +160,45 @@ def _generate_daily(state: AgentState) -> dict:
 # Weekly report — 3 chiamate Sonnet per team
 # ---------------------------------------------------------------------------
 
-_WEEKLY_BASE_USER = """\
-PERIODO: settimana al {run_at}
-RISK SCORE FINALE: {final_score:.1f}/100 ({risk_label})
-
-Score per area:
-  🌍 Geopolitico:  {score_geo:.0f}/100
-  🌿 Ambiente:     {score_env:.0f}/100
-  🌱 Colture:      {score_crops:.0f}/100
-  💰 Prezzi:       {score_prices:.0f}/100
-
-SEGNALI GEOPOLITICI:
-{signals_geo}
-
-SEGNALI AMBIENTE:
-{signals_env}
-
-SEGNALI COLTURE:
-{signals_crops}
-
-SEGNALI PREZZI:
-{signals_prices}
-
-SINTESI PER AREA:
-  Geo:      {summary_geo}
-  Ambiente: {summary_env}
-  Colture:  {summary_crops}
-  Prezzi:   {summary_prices}
-
-ALERT ATTIVI: {alerts_str}
-{rag_section}
-"""
+_WEEKLY_BASE_USER = load_prompt(
+    "report_weekly.base_user.txt",
+    "PERIODO: settimana al {run_at}\nRISK SCORE FINALE: {final_score:.1f}/100\n{rag_section}\n",
+)
 
 # --- Acquisti ---
 
-_ACQUISTI_SYSTEM = """\
-Sei il responsabile acquisti caffè verde di Lavazza con 15 anni di esperienza.
-Hai accesso ai dati di intelligence. Produci un briefing operativo per decidere:
-- Comprare / hedgiare / attendere questa settimana?
-- Quali sono i prezzi di riferimento e le finestre di opportunità?
-- Quali rischi di fornitura monitorare?
-Tono: operativo, numerico, orientato alla decisione. Lingua: italiano. SOLO JSON valido.
-"""
+_ACQUISTI_SYSTEM = load_prompt(
+    "report_weekly_acquisti.system.txt",
+    "Sei il responsabile acquisti caffè verde di Lavazza. Rispondi solo con JSON valido.",
+)
 
 _ACQUISTI_USER = (
     _WEEKLY_BASE_USER
-    + """
-Produci questo JSON per il team Acquisti:
-{{
-  "headline": "<titolo orientato ai prezzi/acquisti, max 80 caratteri>",
-  "focus": "acquisti",
-  "price_outlook": "<analisi dettagliata prezzi arabica, trend, livelli target>",
-  "fx_outlook": "<analisi BRL/EUR, impatto sul costo in euro>",
-  "supply_risk": "<rischi fornitura da Brasile, probabilità disruption>",
-  "recommendations": [
-    "<azione concreta 1 con razionale numerico>",
-    "<azione concreta 2>",
-    "<azione concreta 3>"
-  ],
-  "hedge_window": "<finestra temporale e livello prezzo per eventuale hedging>",
-  "outlook": "<cosa monitorare questa settimana per gli acquisti>"
-}}
-"""
+    + load_prompt("report_weekly_acquisti.user_tail.txt", '\n{"focus":"acquisti"}')
 )
 
 # --- Quality ---
 
-_QUALITY_SYSTEM = """\
-Sei il responsabile qualità materia prima di Lavazza.
-Analizzi i dati di origine per valutare la qualità attesa del caffè brasiliano:
-- Condizioni colturali durante la maturazione dei chicchi
-- Impatto di siccità, incendi, ENSO sulla qualità sensoriale
-- Rischi defect rate e contaminazioni
-Tono: tecnico-qualitativo, preciso. Lingua: italiano. SOLO JSON valido.
-"""
+_QUALITY_SYSTEM = load_prompt(
+    "report_weekly_quality.system.txt",
+    "Sei il responsabile qualità materia prima di Lavazza. Rispondi solo con JSON valido.",
+)
 
 _QUALITY_USER = (
     _WEEKLY_BASE_USER
-    + """
-Produci questo JSON per il team Quality:
-{{
-  "headline": "<titolo orientato alla qualità del raccolto, max 80 caratteri>",
-  "focus": "quality",
-  "crop_quality_outlook": "<analisi impatto condizioni ambientali sulla qualità del chicco>",
-  "regional_analysis": "<differenze qualitative tra regioni (MG, ES, BA, SP, Rondônia)>",
-  "risk_factors": [
-    "<fattore di rischio qualità 1 con spiegazione>",
-    "<fattore 2>",
-    "<fattore 3>"
-  ],
-  "sensory_risk": "<rischio profili aromatici, acidità, corpo — impatto sul blend Lavazza>",
-  "recommendations": [
-    "<azione quality 1>",
-    "<azione quality 2>"
-  ],
-  "outlook": "<cosa monitorare questa settimana per la qualità>"
-}}
-"""
+    + load_prompt("report_weekly_quality.user_tail.txt", '\n{"focus":"quality"}')
 )
 
 # --- Management ---
 
-_MGMT_SYSTEM = """\
-Sei il direttore strategico di Lavazza. Produci una sintesi esecutiva settimanale
-del rischio Brasile per il top management: panoramica strategica, correlazioni
-tra aree di rischio, impatto sul business Lavazza, decisioni da prendere.
-Tono: strategico, C-level, orientato al business. Lingua: italiano. SOLO JSON valido.
-"""
+_MGMT_SYSTEM = load_prompt(
+    "report_weekly_management.system.txt",
+    "Sei il direttore strategico di Lavazza. Rispondi solo con JSON valido.",
+)
 
 _MGMT_USER = (
     _WEEKLY_BASE_USER
-    + """
-Produci questo JSON per il Management:
-{{
-  "headline": "<titolo strategico con risk score, max 80 caratteri>",
-  "focus": "management",
-  "executive_summary": "<3-4 frasi: quadro complessivo, trend, impatto business>",
-  "sections": [
-    {{"area": "geo",         "score": {score_geo_int}, "text": "<50-70 parole>", "signals": ["<chiave>"]}},
-    {{"area": "environment", "score": {score_env_int}, "text": "<50-70 parole>", "signals": ["<chiave>"]}},
-    {{"area": "crops",       "score": {score_crops_int}, "text": "<50-70 parole>", "signals": ["<chiave>"]}},
-    {{"area": "prices",      "score": {score_prices_int}, "text": "<50-70 parole>", "signals": ["<chiave>"]}}
-  ],
-  "correlations": ["<correlazione strategica 1>", "<correlazione 2>"],
-  "business_impact": "<impatto diretto sul P&L / supply chain Lavazza>",
-  "strategic_actions": [
-    "<decisione strategica 1>",
-    "<decisione strategica 2>"
-  ],
-  "risk_score": {final_score_r},
-  "alerts": {alerts_json},
-  "outlook": "<outlook 7-14 giorni: eventi chiave da monitorare>"
-}}
-"""
+    + load_prompt("report_weekly_management.user_tail.txt", '\n{"focus":"management"}')
 )
 
 

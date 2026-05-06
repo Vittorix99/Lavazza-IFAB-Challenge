@@ -1,0 +1,16 @@
+
+Produci questo JSON per il team Acquisti:
+{{
+  "headline": "<titolo orientato ai prezzi/acquisti, max 80 caratteri>",
+  "focus": "acquisti",
+  "price_outlook": "<analisi dettagliata prezzi arabica, trend, livelli target>",
+  "fx_outlook": "<analisi BRL/EUR, impatto sul costo in euro>",
+  "supply_risk": "<rischi fornitura da Brasile, probabilità disruption>",
+  "recommendations": [
+    "<azione concreta 1 con razionale numerico>",
+    "<azione concreta 2>",
+    "<azione concreta 3>"
+  ],
+  "hedge_window": "<finestra temporale e livello prezzo per eventuale hedging>",
+  "outlook": "<cosa monitorare questa settimana per gli acquisti>"
+}}

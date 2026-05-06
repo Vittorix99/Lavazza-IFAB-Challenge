@@ -1,0 +1,19 @@
+
+Produci questo JSON per il team Quality:
+{{
+  "headline": "<titolo orientato alla qualità del raccolto, max 80 caratteri>",
+  "focus": "quality",
+  "crop_quality_outlook": "<analisi impatto condizioni ambientali sulla qualità del chicco>",
+  "regional_analysis": "<differenze qualitative tra regioni (MG, ES, BA, SP, Rondônia)>",
+  "risk_factors": [
+    "<fattore di rischio qualità 1 con spiegazione>",
+    "<fattore 2>",
+    "<fattore 3>"
+  ],
+  "sensory_risk": "<rischio profili aromatici, acidità, corpo — impatto sul blend Lavazza>",
+  "recommendations": [
+    "<azione quality 1>",
+    "<azione quality 2>"
+  ],
+  "outlook": "<cosa monitorare questa settimana per la qualità>"
+}}

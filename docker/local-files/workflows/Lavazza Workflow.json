@@ -574,13 +574,17 @@
     {
       "parameters": {
         "method": "PUT",
-        "url": "http://qdrant:6333/collections/geo_texts/points",
+        "url": "={{ $env.QDRANT_URL.replace(/\\/$/, '') + '/collections/geo_texts/points' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Content-Type",
               "value": "application/json"
+            },
+            {
+              "name": "api-key",
+              "value": "={{ $env.QDRANT_API_KEY }}"
             }
           ]
         },
@@ -960,13 +964,17 @@
     {
       "parameters": {
         "method": "PUT",
-        "url": "http://qdrant:6333/collections/geo_texts/points",
+        "url": "={{ $env.QDRANT_URL.replace(/\\/$/, '') + '/collections/geo_texts/points' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Content-Type",
               "value": "application/json"
+            },
+            {
+              "name": "api-key",
+              "value": "={{ $env.QDRANT_API_KEY }}"
             }
           ]
         },
@@ -2128,13 +2136,17 @@
     {
       "parameters": {
         "method": "PUT",
-        "url": "http://qdrant:6333/collections/crops_texts/points",
+        "url": "={{ $env.QDRANT_URL.replace(/\\/$/, '') + '/collections/crops_texts/points' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Content-Type",
               "value": "application/json"
+            },
+            {
+              "name": "api-key",
+              "value": "={{ $env.QDRANT_API_KEY }}"
             }
           ]
         },
@@ -2316,13 +2328,17 @@
     {
       "parameters": {
         "method": "PUT",
-        "url": "http://qdrant:6333/collections/geo_texts/points",
+        "url": "={{ $env.QDRANT_URL.replace(/\\/$/, '') + '/collections/geo_texts/points' }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
             {
               "name": "Content-Type",
               "value": "application/json"
+            },
+            {
+              "name": "api-key",
+              "value": "={{ $env.QDRANT_API_KEY }}"
             }
           ]
         },

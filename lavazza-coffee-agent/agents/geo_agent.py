@@ -24,7 +24,9 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 from agents.state import AgentState
+from source_configs.sources import get_freshness_threshold_days, get_source_cadence
 from utils.db import get_recent_docs
+from utils.prompt_loader import load_prompt
 from utils.qdrant import collection_exists, search
 
 load_dotenv()
@@ -34,46 +36,15 @@ _GEO_QUERY = (
     "political instability supply chain disruption"
 )
 
-_FRESHNESS_DAYS = {"hourly": 1, "daily": 2, "6h": 1}
+_SYSTEM_PROMPT = load_prompt(
+    "geo_agent.system.txt",
+    "Sei un analista geopolitico caffè. Rispondi solo con JSON valido.",
+)
 
-_SYSTEM_PROMPT = """\
-Sei un analista geopolitico specializzato in rischi per la supply chain del caffè \
-arabica brasiliano. Analizzi news, comunicati WTO e segnali geopolitici per valutare \
-il rischio operativo per un torrefattore europeo (Lavazza).
-
-Rispondi SEMPRE e SOLO con JSON valido, senza testo aggiuntivo fuori dal JSON.
-"""
-
-_USER_TEMPLATE = """\
-Analizza i seguenti segnali geopolitici recenti relativi al Brasile e al mercato del caffè:
-
-{context_text}
-
-Produci un JSON con questa struttura esatta:
-{{
-  "signals": [
-    {{
-      "source": "<GDELT|WTO_RSS|GEO_NEWS>",
-      "area": "geo",
-      "fact": "<fatto chiave in max 120 caratteri>",
-      "direction": "<positive|negative|neutral>",
-      "intensity": "<low|medium|high>",
-      "explanation": "<spiegazione impatto su supply caffè in max 200 caratteri>"
-    }}
-  ],
-  "summary": "<sintesi rischio geopolitico Brasile-caffè in 2-3 frasi>",
-  "score": <numero float 0-100 che rappresenta il rischio geopolitico>
-}}
-
-Regole per score:
-- 0-20: scenario stabile, nessun rischio commerciale
-- 21-40: tensioni minori, impatto trascurabile
-- 41-60: rischio moderato (dazi, tensioni diplomatiche, proteste)
-- 61-80: rischio elevato (sanzioni, crisi politica, blocchi export)
-- 81-100: emergenza (guerra commerciale, embargo, collasso istituzionale)
-
-Genera 3-5 segnali significativi. Se le news sono irrilevanti al caffè, score ≤ 20.
-"""
+_USER_TEMPLATE = load_prompt(
+    "geo_agent.user.txt",
+    "Analizza questi segnali geopolitici e rispondi con JSON valido: {context_text}",
+)
 
 
 def _get_embedding(text: str) -> list[float] | None:
@@ -213,15 +184,21 @@ def geo_agent(state: AgentState) -> dict:
         except Exception:
             days_old = None
 
+        gdelt_cadence = get_source_cadence("GDELT")
+        wto_cadence = get_source_cadence("WTO_RSS")
         freshness_updates["GDELT"] = {
             "days_old": days_old,
-            "is_fresh": demo_mode or (days_old is not None and days_old <= 1),
-            "cadenza": "hourly",
+            "is_fresh": demo_mode or (
+                days_old is not None and days_old <= get_freshness_threshold_days(gdelt_cadence)
+            ),
+            "cadenza": gdelt_cadence,
         }
         freshness_updates["WTO_RSS"] = {
             "days_old": days_old,
-            "is_fresh": demo_mode or (days_old is not None and days_old <= 1),
-            "cadenza": "6h",
+            "is_fresh": demo_mode or (
+                days_old is not None and days_old <= get_freshness_threshold_days(wto_cadence)
+            ),
+            "cadenza": wto_cadence,
         }
 
     # --- Nessun dato disponibile ----------------------------------------

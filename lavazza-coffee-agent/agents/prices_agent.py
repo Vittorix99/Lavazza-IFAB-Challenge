@@ -14,6 +14,7 @@ Fonti attuali (raw_prices): WB_PINK_SHEET, BCB_PTAX, ECB_DATA_PORTAL
 from datetime import datetime, timezone
 
 from agents.state import AgentState
+from source_configs.sources import get_freshness_threshold_days, get_source_cadence
 from utils.db import get_recent_docs
 from utils.llm_analyzer import analyze_with_haiku
 from utils.split_doc import split_doc
@@ -21,23 +22,13 @@ from utils.split_doc import split_doc
 
 import re as _re
 
-# Fallback cadenze per fonti che non memorizzano 'cadenza' nel documento raw
-_SOURCE_CADENCE = {
-    "BCB_PTAX": "daily",
-    "ECB_DATA_PORTAL": "daily",
-    "WB_PINK_SHEET": "monthly",
-    "WORLD_BANK_PINKSHEET": "monthly",
-}
-
 
 def _compute_freshness(doc: dict, demo_mode: bool) -> dict:
     cadence = str(doc.get("cadenza", "")).strip().lower()
     if not cadence or cadence == "unknown":
-        source = str(doc.get("source", "")).upper()
-        cadence = _SOURCE_CADENCE.get(source, "unknown")
+        cadence = get_source_cadence(str(doc.get("source", "")))
 
-    thresholds = {"hourly": 1, "daily": 2, "weekly": 10, "monthly": 35, "unknown": 30}
-    threshold = thresholds.get(cadence, 30)
+    threshold = get_freshness_threshold_days(cadence)
 
     try:
         raw_ts = str(doc.get("collected_at", "")).strip()

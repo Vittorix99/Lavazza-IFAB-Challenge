@@ -19,6 +19,8 @@ import re
 import anthropic
 from dotenv import load_dotenv
 
+from utils.prompt_loader import load_prompt
+
 load_dotenv()
 
 # ---------------------------------------------------------------------------
@@ -92,53 +94,15 @@ _AREA_CONTEXT = {
 # Prompt templates
 # ---------------------------------------------------------------------------
 
-_SYSTEM_PROMPT = """\
-Sei un analista specializzato nella supply chain del caffè arabica brasiliano per Lavazza (torrefattore europeo).
+_SYSTEM_PROMPT = load_prompt(
+    "llm_analyzer.system.txt",
+    "Sei un analista supply chain caffè. Rispondi solo con JSON valido.",
+)
 
-Il tuo compito: leggere documenti di dati (qualsiasi schema, qualsiasi fonte) e estrarre segnali di rischio strutturati.
-
-Regole fondamentali:
-- NON fare assunzioni sui nomi dei campi: leggi il documento e capisci cosa contiene.
-- Se un documento ha campi che non conosci, interpretali dal contesto e dai valori.
-- Focalizzati SOLO sui segnali rilevanti per la supply chain del caffè.
-- Sii concreto: cita valori numerici specifici nei "fact".
-- Rispondi SEMPRE e SOLO con JSON valido, zero testo fuori dal JSON.
-"""
-
-_USER_TEMPLATE = """\
-AREA DI ANALISI: {area}
-DOMINIO: {description}
-PAESE: {country}
-
-=== DOCUMENTI DA ANALIZZARE ===
-{docs_text}
-
-=== ISTRUZIONI ===
-Leggi ogni documento, identifica i dati rilevanti (qualunque siano i nomi dei campi),
-e produci segnali di rischio per la supply chain caffè brasiliana.
-
-Scala di riferimento per lo score di quest'area:
-{score_scale}
-
-Rispondi con questo JSON esatto:
-{{
-  "signals": [
-    {{
-      "source": "<valore del campo 'source' nel documento>",
-      "area": "{area}",
-      "fact": "<fatto chiave con valori numerici, max 120 caratteri>",
-      "direction": "<positive|negative|neutral>",
-      "intensity": "<low|medium|high>",
-      "explanation": "<perché questo fatto impatta la supply caffè, max 200 caratteri>"
-    }}
-  ],
-  "summary": "<sintesi rischio {area} in 2-3 frasi con i dati più rilevanti>",
-  "score": <numero float 0-100 secondo la scala fornita>
-}}
-
-Genera 1 segnale per documento (2 se il documento è molto ricco).
-Se un dato è neutro o irrilevante per il caffè, usa direction=neutral e intensity=low.
-"""
+_USER_TEMPLATE = load_prompt(
+    "llm_analyzer.user.txt",
+    "Analizza area={area}, paese={country}. Documenti: {docs_text}. Rispondi con JSON valido.",
+)
 
 
 # ---------------------------------------------------------------------------

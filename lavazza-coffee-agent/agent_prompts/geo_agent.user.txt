@@ -1,0 +1,28 @@
+Analizza i seguenti segnali geopolitici recenti relativi al Brasile e al mercato del caffè:
+
+{context_text}
+
+Produci un JSON con questa struttura esatta:
+{{
+  "signals": [
+    {{
+      "source": "<GDELT|WTO_RSS|GEO_NEWS>",
+      "area": "geo",
+      "fact": "<fatto chiave in max 120 caratteri>",
+      "direction": "<positive|negative|neutral>",
+      "intensity": "<low|medium|high>",
+      "explanation": "<spiegazione impatto su supply caffè in max 200 caratteri>"
+    }}
+  ],
+  "summary": "<sintesi rischio geopolitico Brasile-caffè in 2-3 frasi>",
+  "score": <numero float 0-100 che rappresenta il rischio geopolitico>
+}}
+
+Regole per score:
+- 0-20: scenario stabile, nessun rischio commerciale
+- 21-40: tensioni minori, impatto trascurabile
+- 41-60: rischio moderato (dazi, tensioni diplomatiche, proteste)
+- 61-80: rischio elevato (sanzioni, crisi politica, blocchi export)
+- 81-100: emergenza (guerra commerciale, embargo, collasso istituzionale)
+
+Genera 3-5 segnali significativi. Se le news sono irrilevanti al caffè, score ≤ 20.

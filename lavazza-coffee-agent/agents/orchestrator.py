@@ -41,6 +41,7 @@ from agents.geo_agent import geo_agent
 from agents.prices_agent import prices_agent
 from agents.report_node import report_node
 from agents.state import AgentState
+from source_configs.sources import get_source_area, get_source_title
 from utils.db import get_latest_doc, save_agent_run
 from utils.qdrant import collection_exists, search
 
@@ -166,19 +167,7 @@ def chart_node(state: AgentState) -> dict:
 
 
 def _chart_title(source: str) -> str:
-    titles = {
-        "WORLD_BANK_PINKSHEET": "Prezzo Arabica — World Bank Pink Sheet",
-        "BCB_PTAX": "Tasso di cambio BRL/USD — BCB PTAX",
-        "ECB_DATA_PORTAL": "Tasso EUR/BRL — BCE",
-        "NOAA_ENSO": "Indice ENSO — NOAA",
-        "NASA_FIRMS": "Incendi attivi — NASA FIRMS",
-        "USDA_FAS_PSD": "Bilancio produzione/stock — USDA FAS",
-        "IBGE_SIDRA": "Produzione agricola — IBGE SIDRA",
-        "COMEX_STAT": "Export caffè Brasile — Comex Stat",
-        "CONAB_PDF": "Previsioni raccolto — CONAB",
-        "FAOSTAT": "Produzione storica — FAOSTAT",
-    }
-    return titles.get(source, f"Dati {source}")
+    return get_source_title(source)
 
 
 def _chart_interpretation(source: str, doc: dict, area_scores: dict) -> str:
@@ -191,19 +180,7 @@ def _chart_interpretation(source: str, doc: dict, area_scores: dict) -> str:
         return summary[:200]
 
     # fallback generico per area
-    area_map = {
-        "WORLD_BANK_PINKSHEET": "prices",
-        "BCB_PTAX": "prices",
-        "ECB_DATA_PORTAL": "prices",
-        "NOAA_ENSO": "environment",
-        "NASA_FIRMS": "environment",
-        "USDA_FAS_PSD": "crops",
-        "IBGE_SIDRA": "crops",
-        "COMEX_STAT": "crops",
-        "CONAB_PDF": "crops",
-        "FAOSTAT": "crops",
-    }
-    area = area_map.get(source, "")
+    area = get_source_area(source)
     score = area_scores.get(area, 0.0)
 
     if movement:
